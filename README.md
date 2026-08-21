@@ -14,7 +14,7 @@ Uses **live Swedish electricity spot prices** from the public
 
 Swedish electricity is priced hourly on a day-ahead market, and the cheapest hour
 of the day typically costs about a third of the most expensive hour. Hospitals
-run 24/7 and spend 8-15 MSEK a year on power, but only part of that load is
+run 24/7 and spend 8-15 Million SEK a year on power, but only part of that load is
 negotiable.
 
 MediMatrx separates the two:
