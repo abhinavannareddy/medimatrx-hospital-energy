@@ -60,7 +60,7 @@ if ($LASTEXITCODE -ne 0) {
 }
 Write-Host "[ok] MongoDB is ready." -ForegroundColor Green
 
-foreach ($d in @("ingest", "price", "optimizer", "gateway")) {
+foreach ($d in @("ingest", "price", "optimizer", "assistant", "forecast", "gateway")) {
     Write-Host "Waiting for $d ..." -ForegroundColor Cyan
     kubectl rollout status deployment/$d -n medimatrx --timeout=240s
     if ($LASTEXITCODE -ne 0) {

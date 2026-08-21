@@ -28,7 +28,7 @@ what the most expensive hour costs. A hospital that does its laundry at 18:00
 because that is when it has always done its laundry is paying roughly three times
 what it needs to.
 
-MediMatrx does four things:
+MediMatrx does six things:
 
 1. **Collects** electricity meter readings from nine metered zones of the
    hospital and stores them.
@@ -42,6 +42,17 @@ MediMatrx does four things:
    than the hours either side of it usually means a chiller is short-cycling or
    an air-handling unit has a stuck damper. These waste money for weeks before
    they finally break.
+5. **Explains** itself. An estates manager can type a question in plain English
+   ("which zone should I move first?", "what if the laundry were more
+   flexible?") and get an answer built from the same numbers the dashboard
+   shows, with the services it consulted listed underneath.
+6. **Plans tomorrow.** It pulls the weather forecast for the site, predicts what
+   the building will use, fetches tomorrow's day-ahead prices, and produces the
+   plan for a day that has not happened yet.
+
+That last point is the one that turns this from a report into a product. Points
+1 to 5 all describe what already happened; an estates manager cannot act on
+yesterday. Point 6 tells them what to do in the morning.
 
 The result is shown on a web dashboard that an estates manager could put on a
 wall screen.
@@ -53,7 +64,11 @@ realistic 24-hour load profiles for each type of hospital department, with rando
 noise and two deliberately injected equipment faults. In a real deployment the
 `POST /api/readings` endpoint would be called by the hospital's existing building
 management system or by IoT meter gateways; the rest of the system is unchanged.
-**The electricity prices are real and live.**
+
+**The electricity prices and the weather forecast are real and live.** They come
+from `elprisetjustnu.se` and Open-Meteo respectively, both public APIs that need
+no key. Only the meter readings are simulated, and they are the one input a real
+customer would already have.
 
 ### Scale, honestly
 
@@ -80,46 +95,75 @@ re-planning every site every fifteen minutes as new price data arrives.*
 
 ### 2.1 The picture
 
+The system is deliberately built in two tiers. Tier 1 services each own
+something: the meter data, the price cache, or the optimisation algorithm.
+Tier 2 services own nothing at all. They answer questions and make plans by
+calling Tier 1, which means there is exactly one copy of the algorithm and
+exactly one copy of the data in the whole system.
+
 ```
-                    ┌─────────────────────────────┐
-                    │   Hospital estates manager  │
-                    │      (a web browser)        │
-                    └──────────────┬──────────────┘
-                                   │  HTTP :30080
-    ═══════════════════════════════╪════════════════════════════════
-      KUBERNETES CLUSTER           │  (NodePort - the only way in)
-    ═══════════════════════════════╪════════════════════════════════
-                                   ▼
-                    ┌─────────────────────────────┐
-                    │      API GATEWAY            │  Node.js / Express
-                    │   gateway-service           │  2-10 replicas
-                    │   serves the dashboard,     │
-                    │   routes every API call     │
-                    └───┬─────────┬────────┬──────┘
-                        │         │        │
-          ┌─────────────┘         │        └──────────────┐
-          ▼                       ▼                       ▼
- ┌──────────────────┐  ┌────────────────────┐  ┌────────────────────┐
- │  INGEST SERVICE  │  │  PRICE SERVICE     │  │ OPTIMIZER SERVICE  │
- │  Node.js/Express │  │  Python / FastAPI  │  │  Python / FastAPI  │
- │  2-12 replicas   │  │  2-4 replicas      │  │  2-15 replicas     │
- │                  │  │                    │  │                    │
- │  owns the data   │  │  caches prices     │  │  stateless compute │
- └────────┬─────────┘  └─────────┬──────────┘  └─────┬─────────┬────┘
-          │                      │                   │         │
-          │ mongodb              │ HTTPS             │ REST    │ REST
-          ▼ :27017               ▼                   └─────────┘
- ┌──────────────────┐   ┌──────────────────┐    (optimizer calls ingest
- │    MONGODB       │   │  elprisetjustnu  │     and price directly)
- │   StatefulSet    │   │  .se  (external  │
- │   1 replica      │   │   public API)    │
- │        │         │   └──────────────────┘
- │  ┌─────▼──────┐  │
- │  │ Persistent │  │
- │  │VolumeClaim │  │
- │  │   2 GiB    │  │
- │  └────────────┘  │
- └──────────────────┘
+                  ┌──────────────────────────────┐
+                  │   Hospital estates manager   │
+                  │        (a web browser)       │
+                  └───────────────┬──────────────┘
+                                  │ HTTP :30080
+   ═══════════════════════════════╪═══════════════════════════════
+     KUBERNETES CLUSTER           │  NodePort - the only way in
+   ═══════════════════════════════╪═══════════════════════════════
+                                  ▼
+                  ┌──────────────────────────────┐
+                  │        API GATEWAY           │  Node.js / Express
+                  │  serves the dashboard and    │  2-10 replicas
+                  │  routes every API call       │
+                  └───────────────┬──────────────┘
+                                  │
+   ── TIER 1: services that own something ──────────────────────────
+                                  │
+        ┌─────────────────────────┼─────────────────────────┐
+        ▼                         ▼                         ▼
+ ┌──────────────┐        ┌──────────────┐        ┌──────────────┐
+ │    INGEST    │        │    PRICE     │        │  OPTIMIZER   │
+ │ Node/Express │        │ Py / FastAPI │        │ Py / FastAPI │
+ │  2-12 pods   │        │   2-4 pods   │        │  2-15 pods   │
+ │              │        │              │        │              │
+ │ owns all     │        │ caches SE1   │        │ owns the     │
+ │ meter data   │        │ to SE4       │        │ algorithm,   │
+ │              │        │ prices       │        │ stateless    │
+ └──────┬───────┘        └──────┬───────┘        └──────────────┘
+        │                       │                        ▲
+        │ mongodb :27017        │ HTTPS                  │
+        ▼                       ▼                        │
+ ┌──────────────┐        ┌──────────────┐                │
+ │   MONGODB    │        │ elprisetjust │                │
+ │  StatefulSet │        │ nu.se        │                │
+ │  1 replica   │        │ (day-ahead   │                │
+ │  ┌────────┐  │        │  prices)     │                │
+ │  │  PVC   │  │        └──────────────┘                │
+ │  │ 2 GiB  │  │                                        │
+ │  └────────┘  │                                        │
+ └──────────────┘                                        │
+                                                         │
+   ── TIER 2: services that only read ────────────────────┼───────
+                                                         │
+        ┌────────────────────────────────────────────────┤
+        │                                                │
+ ┌──────┴───────┐                                 ┌──────┴───────┐
+ │  ASSISTANT   │                                 │   FORECAST   │
+ │ Py / FastAPI │                                 │ Py / FastAPI │
+ │   2-6 pods   │                                 │   2-4 pods   │
+ │              │                                 │              │
+ │ answers      │                                 │ predicts     │
+ │ questions in │                                 │ tomorrow,    │
+ │ plain words  │                                 │ then asks    │
+ │              │                                 │ the optimizer│
+ └──────────────┘                                 └──────┬───────┘
+                                                         │ HTTPS
+                                                         ▼
+                                                  ┌──────────────┐
+                                                  │  Open-Meteo  │
+                                                  │  (weather    │
+                                                  │   forecast)  │
+                                                  └──────────────┘
 ```
 
 ### 2.2 Mapping software components to microservices
@@ -129,11 +173,18 @@ system and the microservices that implement them. This is that mapping.
 
 | # | Logical component | Implemented by | Language / framework | Owns state? | Docker Hub image |
 |---|---|---|---|---|---|
-| C1 | Presentation & entry point | **API Gateway** (`gateway`) | Node.js 20 / Express | No | `medimatrx-gateway:1.0.0` |
-| C2 | Metering data management | **Ingest Service** (`ingest`) | Node.js 20 / Express | **Yes, owns MongoDB** | `medimatrx-ingest:1.0.0` |
-| C3 | Market price acquisition | **Price Service** (`price`) | Python 3.12 / FastAPI | In-memory cache only | `medimatrx-price:1.0.0` |
-| C4 | Optimisation & analytics | **Optimizer Service** (`optimizer`) | Python 3.12 / FastAPI | No, fully stateless | `medimatrx-optimizer:1.0.0` |
-| C5 | Persistence | **MongoDB** | MongoDB 7.0 | Yes | `mongo:7.0` (official) |
+| C1 | Presentation & entry point | **API Gateway** (`gateway`) | Node.js 20 / Express | No | `medimatrx-gateway:1.2.0` |
+| C2 | Metering data management | **Ingest Service** (`ingest`) | Node.js 20 / Express | **Yes, owns MongoDB** | `medimatrx-ingest:1.2.0` |
+| C3 | Market price acquisition | **Price Service** (`price`) | Python 3.12 / FastAPI | In-memory cache only | `medimatrx-price:1.2.0` |
+| C4 | Optimisation & analytics | **Optimizer Service** (`optimizer`) | Python 3.12 / FastAPI | No, fully stateless | `medimatrx-optimizer:1.2.0` |
+| C5 | Natural-language explanation | **Assistant Service** (`assistant`) | Python 3.12 / FastAPI | No, fully stateless | `medimatrx-assistant:1.2.0` |
+| C6 | Next-day prediction & planning | **Forecast Service** (`forecast`) | Python 3.12 / FastAPI | No, fully stateless | `medimatrx-forecast:1.2.0` |
+| C7 | Persistence | **MongoDB** | MongoDB 7.0 | Yes | `mongo:7.0` (official) |
+
+Six application microservices plus a database. C1 to C4 are Tier 1 in the
+diagram above; C5 and C6 are Tier 2, and the important property they share is
+that neither of them contains a copy of any business logic. Both call C4 for
+every number they report.
 
 #### C1: API Gateway
 
@@ -142,9 +193,9 @@ JavaScript, and forward each API call to whichever internal service owns that
 job. Apply cross-cutting concerns once: security headers, rate limiting, request
 logging, upstream timeouts.
 
-*Why it exists:* without it, the browser would need to know four addresses and all
-four services would have to be exposed to the network. With it, exactly one pod
-in the system has a public door, and the other three are unreachable from outside
+*Why it exists:* without it, the browser would need to know six addresses and all
+six services would have to be exposed to the network. With it, exactly one pod
+in the system has a public door, and the other five are unreachable from outside
 the cluster.
 
 #### C2: Ingest Service
@@ -165,11 +216,12 @@ scaling both when only one is under pressure.
 of our own. It calls `elprisetjustnu.se`, normalises whatever it gets into
 exactly 24 hourly values, caches the result for 15 minutes, and serves it.
 
-*Why it exists separately:* it is the only component that touches the public
-internet, which makes it the component with the largest attack surface and the
-one most likely to fail for reasons outside our control. Isolating it means an
-outage at `elprisetjustnu.se` cannot take down meter collection, and the network
-policy can grant internet access to this one pod and no other.
+*Why it exists separately:* it is one of only two components that touch the
+public internet (the other is the forecast service), which makes it one of the
+two with the largest attack surface and the ones most likely to fail for reasons
+outside our control. Isolating it means an outage at `elprisetjustnu.se` cannot
+take down meter collection, and the network policy can grant internet access to
+these two pods and no others.
 
 It also demonstrates the assignment requirement to *programmatically connect to
 and use a REST API*.
@@ -186,7 +238,98 @@ of recommendations. Also runs the anomaly detector.
 it the easiest thing in the system to scale and the thing that will need scaling
 first as sites are added. Any replica can answer any request.
 
-#### C5: MongoDB
+*How load is placed, and why it is not obvious.* The naive approach is to move
+deferrable load into the cheapest hours, cheapest first. That is wrong, and it
+is wrong in a way that costs money rather than merely leaving money on the
+table.
+
+A hospital pays two electricity bills. One is for energy, measured in kWh and
+priced hour by hour. The other is the **grid demand charge**, billed on the
+single highest hour of the month, at roughly 68 SEK per kW. If every zone
+independently moves its load to the cheapest hour, they all choose the *same*
+hour, and together they build a new peak that can be taller than the one just
+removed. The energy bill falls; the demand charge rises by more. On a day where
+cheap power happens to arrive during the site's busiest hours, this is a large
+net loss.
+
+The optimizer therefore places load in two passes:
+
+1. **Removal.** Every deferrable zone gives up its movable share of the hours
+   being relieved. Nothing is placed yet.
+2. **Placement.** The site profile after removal is known, so the optimizer
+   solves for the *lowest site-wide ceiling* whose spare capacity is still big
+   enough to hold everything that was picked up, and fills up to that ceiling
+   and no higher. This is the standard **water-filling** formulation of peak
+   minimisation, solved by binary search.
+
+Splitting the passes is what makes the second one possible: where load lands is
+a decision about the whole site, and it cannot be made one zone at a time.
+
+Placement considers **all** twenty-four hours, preferring cheap ones. That
+detail buys a guarantee rather than a hope: today's actual profile is itself a
+valid arrangement that fits under today's peak, so a ceiling equal to the
+baseline peak is always feasible, and the search can never return anything
+higher. **This optimizer cannot raise the site peak.** It is a property of the
+method, not a case that is tested for and patched.
+
+Two honesty rules sit on top of the arithmetic:
+
+- The peak figure is reported **signed**. An earlier version clamped it at zero,
+  which meant a plan that raised the peak displayed as "0 kW saved" instead of
+  as the problem it was. A regression must never round down to reassurance.
+- If the energy bill would rise by more than the demand charge falls, the plan
+  is **not recommended at all**. The dashboard leads with "change nothing
+  today" and shows the net loss. A tool that says "saves you money" on a day
+  when it does not is worse than no tool, because somebody acts on it.
+
+#### C5: Assistant Service
+
+*Responsibility:* turn a question typed in plain English into a correct,
+grounded answer. It classifies the question against a set of known intents,
+calls whichever of C2, C3 and C4 can actually answer it, and writes the reply
+from the numbers those services return.
+
+*Why it exists separately:* because it is the one component where a wrong
+answer is invisible. Every other service returns structured JSON that is either
+right or obviously broken; this one returns fluent prose, which is convincing
+whether or not it is true. Isolating it means the rule that matters can be
+stated precisely and checked: **the assistant never computes anything.** If it
+quotes a saving, that number came from the optimizer's API on that request.
+
+It is also read-only by construction. It has no database credentials and no
+write path to any service, so no phrasing of any question can change hospital
+data. An optional LLM step may rewrite the wording, but it is given the
+retrieved numbers and cannot reach the network on its own; if it is not
+configured or fails, the deterministic answer is served unchanged. That is why
+the demo runs with no API key at all.
+
+#### C6: Forecast Service
+
+*Responsibility:* say what to do tomorrow. It fetches the weather forecast for
+the site from Open-Meteo, converts it into predicted load per zone using a
+degree-hour model, fetches tomorrow's day-ahead prices from C3, and then posts
+the whole predicted day to C4's scenario endpoint to get a plan.
+
+*Why it exists separately:* every other service in the platform describes what
+already happened. This is the only one that describes what has not happened
+yet, and that difference is the difference between a report and a product. A
+report tells an estates manager their bill was high; a plan tells them to start
+the laundry at 02:00 tomorrow.
+
+*The design decision worth defending:* it does **not** contain a copy of the
+optimisation algorithm. It could have. Instead it sends the predicted day to
+the optimizer and asks the same question the dashboard asks about today. This
+means today's report and tomorrow's plan are produced by one implementation and
+cannot drift apart as the algorithm changes, which is the failure mode that
+kills this kind of feature in practice.
+
+It is honest about uncertainty. Every plan returns a `confidence` field and a
+list of `caveats`, because day-ahead prices genuinely do not exist until the
+market publishes them in the early afternoon. Before then the service says so
+rather than inventing a number and presenting it with the same confidence as a
+measured one.
+
+#### C7: MongoDB
 
 *Responsibility:* durable storage of meter readings.
 
@@ -208,7 +351,9 @@ PersistentVolumeClaim**, so the data survives the pod being destroyed.
 | **Cache-Aside** | `price` caches for 15 min | Turns hundreds of calls to a third-party API into four per hour. Cheaper, faster, and a good citizen. |
 | **Graceful degradation / fallback** | `price` serves stale cache, then a modelled curve | An upstream outage degrades one number's accuracy instead of blanking the dashboard. |
 | **Retry with backoff** | `ingest` → MongoDB | Start-up order is not guaranteed in Kubernetes. The service waits patiently instead of crash-looping. |
-| **Health / readiness separation** | all four services | Liveness failure = restart me. Readiness failure = stop sending me traffic but let me recover. Confusing the two causes restart storms. |
+| **Health / readiness separation** | all six services | Liveness failure = restart me. Readiness failure = stop sending me traffic but let me recover. Confusing the two causes restart storms. |
+| **Grounded assistant / tool use** | `assistant` calls C2, C3, C4 for every figure | The component that speaks in sentences is forbidden from doing arithmetic. Fluent prose is persuasive whether or not it is correct, so the only safe design is one where it has nothing to be wrong about. |
+| **Single source of truth for logic** | `forecast` posts scenarios to C4 rather than re-implementing it | Today's report and tomorrow's plan come out of one algorithm. Duplicating it would guarantee they eventually disagree, and the disagreement would surface in front of a customer. |
 | **Bulkhead & fail-fast** | gateway's 8 s upstream timeout | A slow service returns a clear 502 instead of hanging every browser connected to the dashboard. |
 | **Stateless compute** | `optimizer`, `price` | The precondition for horizontal scaling. No session state, no sticky routing, no coordination. |
 | **Externalised configuration** | ConfigMap + Secret | One image runs in every environment (Twelve-Factor). Credentials are never in source control. |
@@ -252,11 +397,13 @@ When the estates manager opens the dashboard:
 | `04-price.yaml` | ClusterIP Service, Deployment | 2 replicas, internal only. |
 | `05-optimizer.yaml` | ClusterIP Service, Deployment | 2 replicas, internal only. |
 | `06-gateway.yaml` | **NodePort** Service, Deployment | The public entry point on port 30080. Ingress alternative included, commented. |
-| `07-autoscaling.yaml` | 4 × HorizontalPodAutoscaler, 3 × PodDisruptionBudget | Independent autoscaling; protection against administrative eviction. |
-| `08-network-policy.yaml` | 10 × NetworkPolicy | Default-deny east-west firewall inside the cluster. |
+| `07-autoscaling.yaml` | 6 × HorizontalPodAutoscaler, 5 × PodDisruptionBudget | Independent autoscaling; protection against administrative eviction. |
+| `08-network-policy.yaml` | 12 × NetworkPolicy | Default-deny east-west firewall inside the cluster. |
+| `09-assistant.yaml` | ClusterIP Service, Deployment | 2 replicas, internal only. |
+| `10-forecast.yaml` | ClusterIP Service, Deployment | 2 replicas, internal only. |
 
-**30 Kubernetes resources in total**, all validated against the upstream
-Kubernetes JSON schemas.
+**40 Kubernetes resources in total**, all validated against the upstream
+Kubernetes JSON schemas with `kubeconform --strict`.
 
 ### 3.2 How the horizontal scaling requirement is satisfied
 
@@ -270,13 +417,22 @@ couples their scaling behaviour:
 | `ingest` | 2 | 12 | CPU 65% **and** memory 75% | Grows with the number of meters reporting; buffers documents in memory on bulk writes, so memory matters too. |
 | `price` | 2 | **4** | CPU 70% | Deliberately capped low, each replica keeps its own cache, so more pods means more calls to somebody else's public API. |
 | `optimizer` | 2 | **15** | CPU 55% | Pure stateless computation; the highest ceiling in the system. |
+| `assistant` | 2 | 10 | CPU 60% | Scales with the number of people asking questions, which is a function of users rather than of meters. |
+| `forecast` | 2 | **4** | CPU 65% | Capped low for the same reason as `price`: each replica calls a third-party weather API, and a plan is produced once a day, not once a click. |
+
+Note that `price` and `forecast` are capped low **on purpose**, and this is an
+architectural point rather than an oversight. Scaling out a service that caches
+somebody else's public API does not make the system faster; it multiplies the
+load placed on that third party and reduces the cache hit rate at the same
+time. The correct ceiling for a service is set by what it depends on, not by how
+much traffic you wish it could take.
 
 The scale-up and scale-down `behavior` blocks are asymmetric on purpose: react
 immediately when load arrives, shrink slowly (a 180-300 second stabilisation
 window) so a brief lull does not cause pods to thrash up and down.
 
 **Demonstration:** `scripts/3-demo-scaling.ps1` scales the optimizer from 2 to 6
-replicas, shows that the other three deployments are unchanged, then issues 20
+replicas, shows that the other five deployments are unchanged, then issues 20
 requests and prints which optimizer pod answered each one.
 
 ### 3.3 How the persistent storage requirement is satisfied
@@ -344,7 +500,7 @@ carbon-reduction figure, which matters for public-sector procurement in Sweden.
 
 **The challenge.** A single call to `/api/optimize` becomes three network hops.
 Every hop can be slow, can fail, or can succeed slowly, which is worse. There is
-no stack trace that spans all four services.
+no stack trace that spans all six services.
 
 **What was done.** Every service emits structured JSON logs on one line, tagged
 with the service name and the pod name, so `kubectl logs` output can be filtered
@@ -423,19 +579,25 @@ Security is discussed here in the order an attacker would meet it.
 
 ### 6.1 What was done
 
-**One door, not four.** Only the gateway has a NodePort. The ingest, price and
-optimizer services are ClusterIP. They have no address reachable from outside
-the cluster at all. Three of the four services simply cannot be attacked from the
-internet.
+**One door, not six.** Only the gateway has a NodePort. The ingest, price,
+optimizer, assistant and forecast services are all ClusterIP. They have no
+address reachable from outside the cluster at all. Five of the six services
+simply cannot be attacked from the internet.
 
 **Default-deny network policy.** Kubernetes by default lets every pod talk to
 every other pod. `08-network-policy.yaml` reverses that: a `default-deny-all`
-policy blocks everything, then ten policies open only the conversations the
+policy blocks everything, then twelve policies open only the conversations the
 system actually needs. The most important is `mongodb-ingress`, **only** pods
 labelled `app: ingest` may open a TCP connection to MongoDB. Even an attacker who
 stole the database password from a compromised optimizer pod would find the
 network refusing the connection. This is lateral-movement containment, and it is
 the difference between one compromised pod and a compromised cluster.
+
+Egress is restricted the same way. Only `price` and `forecast` may reach the
+public internet, only on port 443, and both policies explicitly exclude the
+private RFC 1918 address ranges. So even if one of those two pods were fully
+compromised, it could not be used to scan the cluster's internal network: it can
+reach the outside world and nothing else.
 
 **Least-privilege containers.** Every container runs as a non-root user
 (`runAsNonRoot: true`), with `allowPrivilegeEscalation: false`, with **all** Linux
@@ -536,6 +698,7 @@ All endpoints are reachable through the gateway at `http://localhost:30080`.
 | Method | Path | Description |
 |---|---|---|
 | `GET` | `/api/prices?area=SE4` | Today's 24 hourly prices, live from elprisetjustnu.se. |
+| `GET` | `/api/prices?area=SE4&day=tomorrow` | Tomorrow's day-ahead prices, once the market has published them. |
 | `GET` | `/api/prices/cheapest-window?hours=3` | The cheapest run of N consecutive hours. |
 | `GET` | `/api/stats` | Cache hit counters and upstream call counters. |
 
@@ -544,7 +707,23 @@ All endpoints are reachable through the gateway at `http://localhost:30080`.
 | Method | Path | Description |
 |---|---|---|
 | `GET` | `/api/optimize?area=SE4` | The full optimisation plan, savings and ranked recommendations. |
+| `GET` | `/api/optimize?flex=laundry:0.9` | The same plan under a what-if flexibility override. Clinical zones are rejected. |
+| `POST` | `/api/optimize/scenario` | Optimise a supplied day rather than today's measured one. This is how the forecast service reuses the algorithm instead of copying it. |
 | `GET` | `/api/anomalies` | Equipment faults detected in the last 24 hours. |
+
+### Assistant Service
+
+| Method | Path | Description |
+|---|---|---|
+| `POST` | `/api/chat` | Ask a question in plain English. Body: `{"message":"which zone should I shift first?"}` Returns the answer, the classified intent, and the services consulted. |
+| `GET` | `/api/chat/suggestions` | Starter questions for the dashboard's chat panel. |
+
+### Forecast Service
+
+| Method | Path | Description |
+|---|---|---|
+| `GET` | `/api/forecast/weather` | Today's and tomorrow's hourly temperature for the site. |
+| `GET` | `/api/forecast/plan?area=SE4` | Tomorrow's predicted load and the optimisation plan for it, with a confidence rating and explicit caveats. |
 
 ### Operational
 

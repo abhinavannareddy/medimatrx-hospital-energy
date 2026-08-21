@@ -29,6 +29,7 @@ from datetime import datetime, timezone
 
 import httpx
 from fastapi import FastAPI, Query
+from pydantic import BaseModel, Field
 from fastapi.responses import JSONResponse
 
 POD = os.environ.get("POD_NAME", socket.gethostname())
@@ -80,6 +81,69 @@ CO2_PEAK_HOUR = 96.0
 # Grid connection / demand charge in SEK per kW of monthly peak.
 # Swedish hospitals genuinely pay this on top of energy.
 DEMAND_CHARGE_SEK_PER_KW_MONTH = 68.0
+
+
+# --------------------------------------------------------------------------
+#  Number formatting
+#  Swedish convention groups thousands with a space, not a comma, and the
+#  currency is written "kr". Python only offers comma grouping, so we format
+#  with commas and swap them. Every figure a human reads goes through these
+#  two helpers, which is why the dashboard, the recommendation text and the
+#  assistant's answers all agree with each other. Getting this wrong looks
+#  small but it is exactly the kind of detail a hospital finance officer
+#  notices first.
+# --------------------------------------------------------------------------
+def grouped(v: float) -> str:
+    """1786.4 -> '1 786'"""
+    return f"{v:,.0f}".replace(",", " ")
+
+
+def lowest_feasible_ceiling(
+    after_removal: list[float],
+    receiving: list[int],
+    need: float,
+    prefer_below: float,
+) -> float:
+    """The lowest site-wide kWh ceiling that can still absorb `need` kWh.
+
+    Given the site profile after load has been removed, and the set of hours
+    we are willing to push load into, find the smallest ceiling C such that
+
+        sum over receiving hours of max(C - profile[h], 0)  >=  need
+
+    This is the standard "water filling" formulation of peak minimisation:
+    imagine pouring `need` litres of water into the valleys of the profile
+    and asking how high the water rises. Binary search converges fast and,
+    unlike a greedy cheapest-hour-first fill, it cannot build a new spike.
+
+    `prefer_below` is the baseline site peak. We start the search assuming we
+    can stay under it, and only go above it if the day genuinely has nowhere
+    else to put the energy, which is reported honestly rather than hidden.
+    """
+    if need <= 0 or not receiving:
+        return max(after_removal) if after_removal else 0.0
+
+    def headroom(c: float) -> float:
+        return sum(max(c - after_removal[h], 0.0) for h in receiving)
+
+    lo = max(after_removal[h] for h in receiving)
+    hi = max(lo, prefer_below)
+
+    # Only if even the baseline peak leaves too little room do we raise the
+    # ceiling above it. Bounded so a pathological input cannot spin forever.
+    guard = 0
+    while headroom(hi) < need and guard < 200:
+        hi = hi * 1.25 + 1.0
+        guard += 1
+
+    for _ in range(60):                      # ~1e-18 relative precision
+        mid = (lo + hi) / 2
+        if headroom(mid) >= need:
+            hi = mid
+        else:
+            lo = mid
+    return hi
+
 
 app = FastAPI(
     title="MediMatrx Optimizer Service",
@@ -133,7 +197,17 @@ def format_hours(hours: list[int]) -> str:
     return ", ".join(f"{a:02d}:00-{b + 1:02d}:00" for a, b in runs)
 
 
-def optimise(summary: dict, prices: dict) -> dict:
+def optimise(summary: dict, prices: dict, flex_overrides: dict | None = None) -> dict:
+    """
+    flex_overrides lets a caller ask "what if the laundry were 90% flexible
+    instead of 85%?" without changing any configuration. It is what powers
+    the assistant's what-if answers, and it is also how an estates manager
+    would model a change before committing to it.
+    """
+    capacity_table = dict(SHIFT_CAPACITY)
+    if flex_overrides:
+        capacity_table.update(flex_overrides)
+
     hourly_price = prices["hourly"]
     day_avg_price = sum(hourly_price) / 24
 
@@ -174,19 +248,49 @@ def optimise(summary: dict, prices: dict) -> dict:
     if not receiving_hours:                      # pathological flat-price day
         receiving_hours = sorted(range(24), key=lambda h: hourly_price[h])[:6]
 
-    hours_by_price = sorted(range(24), key=lambda h: hourly_price[h])
-    expensive_hours = relief_hours
+    # Preferred hours first, then everything else cheapest-first as a spill
+    # tier. On most days the spill tier is never touched: the cheap hours
+    # have plenty of room. It matters on days where the price curve leaves
+    # only two or three hours below the average, because then ALL the
+    # deferrable load in the hospital wants the same two hours, and a plan
+    # that stacks it there trades an energy saving for a much larger demand
+    # charge.
+    #
+    # Including every hour also gives the algorithm a useful guarantee.
+    # Today's actual profile is itself a valid arrangement that fits under
+    # today's peak, so a ceiling equal to the baseline peak is always
+    # feasible. The search below therefore can never return a ceiling above
+    # the baseline peak, which means this optimiser cannot raise the site
+    # peak. That is a property of the method, not something we test for.
+    placement_hours = receiving_hours + [
+        h for h in sorted(range(24), key=lambda h: hourly_price[h])
+        if h not in receiving_hours
+    ]
 
-    # ---- 3. Move deferrable load out of expensive hours ------------------
-    optimised_hourly_total = [0.0] * 24
-    optimised_cost = 0.0
+    # ---- 3. Move deferrable load out of the hours we want to relieve -----
+    #
+    # This is done in TWO passes, and the split is the whole point.
+    #
+    # Pass 1 takes movable load out of every zone. Pass 2 decides where it
+    # lands. These cannot be merged, because "where it lands" is a decision
+    # about the WHOLE SITE, not about one zone. If each zone independently
+    # picks the cheapest hour, every zone picks the SAME hour, and together
+    # they build a new peak taller than the one we just removed. That is not
+    # a saving, it is a bigger demand charge with extra steps.
+    #
+    # An earlier version of this function did exactly that and reported a
+    # peak reduction of zero while quietly making the peak worse.
     recommendations = []
     protected_zones = []
     total_shifted_kwh = 0.0
     co2_saved_g = 0.0
 
+    plans = {}                # zoneId -> the 24-hour plan we are building
+    movable_by_zone = {}      # zoneId -> kWh picked up in pass 1
+
     for z in zones:
         plan = list(z["hourlyKwh"])          # start from what actually happened
+        movable = 0.0
 
         if z["critical"] or not z["shiftable"]:
             # ---- SAFETY RULE -------------------------------------------
@@ -197,61 +301,104 @@ def optimise(summary: dict, prices: dict) -> dict:
             if z["critical"]:
                 protected_zones.append(z["name"])
         else:
-            capacity = SHIFT_CAPACITY.get(z["zoneId"], 0.0)
+            capacity = capacity_table.get(z["zoneId"], 0.0)
             if capacity > 0:
-                # Take the movable share out of every expensive hour...
-                movable = 0.0
-                for h in expensive_hours:
+                for h in relief_hours:
                     take = plan[h] * capacity
                     plan[h] -= take
                     movable += take
 
-                if movable > 0.01:
-                    # ...and put it back into the cheapest hours, spreading it
-                    # over enough hours that we never create a new spike.
-                    # We cap each receiving hour at the zone's rated power.
-                    remaining = movable
-                    cap_per_hour = z["baselineKw"] * 1.6
-                    receiving = []
-                    for h in receiving_hours:
-                        if remaining <= 0.01:
-                            break
-                        headroom = max(cap_per_hour - plan[h], 0.0)
-                        add = min(headroom, remaining)
-                        if add > 0.5:                      # ignore trivial dribbles
-                            plan[h] += add
-                            remaining -= add
-                            receiving.append(h)
-                    # If we somehow could not place it all, put the rest back
-                    # in the cheapest hour rather than losing energy.
-                    if remaining > 0.01:
-                        plan[receiving_hours[0]] += remaining
-                        receiving.append(receiving_hours[0])
+        plans[z["zoneId"]] = plan
+        movable_by_zone[z["zoneId"]] = movable
 
-                    before = sum(z["hourlyKwh"][h] * hourly_price[h] for h in range(24))
-                    after = sum(plan[h] * hourly_price[h] for h in range(24))
-                    saving = before - after
+    # What the site looks like after the removals, before anything goes back.
+    after_removal_total = [
+        sum(plans[z["zoneId"]][h] for z in zones) for h in range(24)
+    ]
+    total_movable = sum(movable_by_zone.values())
 
-                    total_shifted_kwh += movable
-                    co2_saved_g += movable * (CO2_PEAK_HOUR - CO2_CHEAP_HOUR)
+    # ---- 3b. Pick the flattest day that still fits the load --------------
+    #
+    # Water filling. We look for the LOWEST site ceiling whose spare space,
+    # across the receiving hours only, is big enough to hold everything we
+    # picked up. Then we fill up to that ceiling and no higher.
+    #
+    # Filling to a ceiling instead of "cheapest hour first" is what makes the
+    # peak fall rather than merely move, and the peak is what the grid
+    # demand charge is billed on: one number, the highest hour of the month.
+    # A plan that halves the energy bill while adding 900 kW to the peak can
+    # easily cost the hospital more than doing nothing.
+    ceiling = lowest_feasible_ceiling(
+        after_removal_total, placement_hours, total_movable, site_peak
+    )
 
-                    window_label = format_hours(receiving)
+    site_now = list(after_removal_total)
 
-                    recommendations.append({
-                        "zoneId": z["zoneId"],
-                        "zone": z["name"],
-                        "action": "shift",
-                        "priority": "high" if saving > 400 else "medium" if saving > 120 else "low",
-                        "shiftedKwh": round(movable, 1),
-                        "targetWindow": window_label,
-                        "savingSek": round(saving, 2),
-                        "text": (
-                            f"Move {movable:,.0f} kWh of {z['name']} load into {window_label}, "
-                            f"when power is cheapest. Saves {saving:,.0f} SEK today "
-                            f"({saving * 365:,.0f} SEK/year)."
-                        ),
-                    })
+    for z in zones:
+        zone_id = z["zoneId"]
+        movable = movable_by_zone[zone_id]
+        if movable <= 0.01:
+            continue
 
+        plan = plans[zone_id]
+        # A zone cannot absorb unlimited power in one hour either. The
+        # laundry has a fixed number of machines; 1.6x its normal draw is a
+        # generous but finite ceiling.
+        cap_per_hour = z["baselineKw"] * 1.6
+        remaining = movable
+        receiving = []
+
+        for h in placement_hours:
+            if remaining <= 0.01:
+                break
+            site_room = max(ceiling - site_now[h], 0.0)
+            zone_room = max(cap_per_hour - plan[h], 0.0)
+            add = min(site_room, zone_room, remaining)
+            if add > 0.5:                      # ignore trivial dribbles
+                plan[h] += add
+                site_now[h] += add
+                remaining -= add
+                receiving.append(h)
+
+        # If a zone's own power limit stopped us placing everything, the
+        # remainder goes into whichever receiving hour is currently LOWEST,
+        # so even the last resort flattens the day instead of spiking it.
+        if remaining > 0.01:
+            h = min(placement_hours, key=lambda x: site_now[x])
+            plan[h] += remaining
+            site_now[h] += remaining
+            if h not in receiving:
+                receiving.append(h)
+
+        before = sum(z["hourlyKwh"][h] * hourly_price[h] for h in range(24))
+        after = sum(plan[h] * hourly_price[h] for h in range(24))
+        saving = before - after
+
+        total_shifted_kwh += movable
+        co2_saved_g += movable * (CO2_PEAK_HOUR - CO2_CHEAP_HOUR)
+
+        window_label = format_hours(sorted(receiving))
+
+        recommendations.append({
+            "zoneId": zone_id,
+            "zone": z["name"],
+            "action": "shift",
+            "priority": "high" if saving > 400 else "medium" if saving > 120 else "low",
+            "shiftedKwh": round(movable, 1),
+            "targetWindow": window_label,
+            "savingSek": round(saving, 2),
+            "text": (
+                f"Move {grouped(movable)} kWh of {z['name']} load into "
+                f"{window_label}, when power is cheapest. Saves "
+                f"{grouped(saving)} kr today "
+                f"({grouped(saving * 365)} kr/year)."
+            ),
+        })
+
+    optimised_hourly_total = [0.0] * 24
+    optimised_cost = 0.0
+    for z in zones:
+        plan = plans[z["zoneId"]]
         for h in range(24):
             optimised_hourly_total[h] += plan[h]
             optimised_cost += plan[h] * hourly_price[h]
@@ -259,24 +406,100 @@ def optimise(summary: dict, prices: dict) -> dict:
     # ---- 4. Peak demand: the second, hidden saving -----------------------
     baseline_peak = max(baseline_hourly_total)
     optimised_peak = max(optimised_hourly_total)
-    peak_reduction_kw = max(baseline_peak - optimised_peak, 0.0)
-    demand_saving_month = peak_reduction_kw * DEMAND_CHARGE_SEK_PER_KW_MONTH
+
+    # Signed on purpose. A previous version clamped this at zero, which meant
+    # a plan that RAISED the site peak displayed as "0 kW saved" instead of
+    # as the problem it was. If this number is ever negative the plan is
+    # costing the hospital money on the demand charge, and the dashboard says
+    # so. Never round a regression down to zero.
+    peak_delta_kw = baseline_peak - optimised_peak
+    peak_reduction_kw = max(peak_delta_kw, 0.0)
+    demand_saving_month = peak_delta_kw * DEMAND_CHARGE_SEK_PER_KW_MONTH
+
+    if peak_delta_kw < -1:
+        log.warning(
+            "plan increases site peak by %.0f kW - demand charge would rise",
+            -peak_delta_kw,
+        )
+        recommendations.append({
+            "zoneId": "site",
+            "zone": "Whole site",
+            "action": "peak-warning",
+            "priority": "high",
+            "savingSek": 0.0,
+            "text": (
+                f"Warning: this plan would raise the site peak by "
+                f"{grouped(-peak_delta_kw)} kW, which costs about "
+                f"{grouped(-demand_saving_month)} kr a month in grid demand "
+                f"charges. The energy saving above does not cover it. Do not "
+                f"apply this plan."
+            ),
+        })
 
     if peak_reduction_kw > 1:
+        peak_text = (
+            f"Site peak demand falls by {grouped(peak_reduction_kw)} kW. At a grid "
+            f"demand charge of {DEMAND_CHARGE_SEK_PER_KW_MONTH:.0f} kr/kW/month "
+            f"that is a further {grouped(demand_saving_month)} kr every month."
+        )
+
         recommendations.append({
             "zoneId": "site",
             "zone": "Whole site",
             "action": "peak-shaving",
             "priority": "high",
             "savingSek": round(demand_saving_month / 30, 2),
-            "text": (
-                f"Site peak demand falls by {peak_reduction_kw:,.0f} kW. At a grid "
-                f"demand charge of {DEMAND_CHARGE_SEK_PER_KW_MONTH:.0f} SEK/kW/month "
-                f"that is a further {demand_saving_month:,.0f} SEK every month."
-            ),
+            "text": peak_text,
         })
 
-    recommendations.sort(key=lambda r: -r["savingSek"])
+    # ---- 5. Is this plan actually worth applying? ------------------------
+    #
+    # Two things are being traded against each other: the energy bill and the
+    # demand charge. Usually they pull the same way, because expensive hours
+    # and busy hours are the same hours. On an inverted day, they do not.
+    #
+    # If cheap power happens to arrive exactly when the hospital is busiest
+    # (a windy weekday afternoon), then flattening the peak means moving load
+    # OUT of the cheapest hours, and the energy bill goes up by more than the
+    # demand charge goes down. The arithmetic is correct; the plan is still a
+    # bad idea.
+    #
+    # A tool that says "saves you money" on a day when it does not is worse
+    # than no tool, because someone acts on it. So when the net is negative
+    # we say so, in the first line, and tell them to do nothing today.
+    energy_saving_check = baseline_cost - optimised_cost
+    annual_total_check = energy_saving_check * 365 + demand_saving_month * 12
+
+    if annual_total_check <= 0:
+        log.warning(
+            "plan is net negative (%.0f kr/year) - advising no action",
+            annual_total_check,
+        )
+        recommendations.insert(0, {
+            "zoneId": "site",
+            "zone": "Whole site",
+            "action": "no-action",
+            "priority": "high",
+            "savingSek": 0.0,
+            "text": (
+                f"Recommendation today: change nothing. Electricity is cheapest "
+                f"during this site's busiest hours, so shifting load would cut "
+                f"the peak but raise the energy bill by more than it saves. "
+                f"The net effect of the plan below would be "
+                f"{grouped(-annual_total_check)} kr a year WORSE than doing "
+                f"nothing. The individual moves are shown for transparency, "
+                f"but they should not be applied today."
+            ),
+        })
+        plan_worth_applying = False
+    else:
+        plan_worth_applying = True
+
+    # Sort by value, but never let the no-action warning leave the top.
+    head = [r for r in recommendations if r["action"] == "no-action"]
+    tail = [r for r in recommendations if r["action"] != "no-action"]
+    tail.sort(key=lambda r: -r["savingSek"])
+    recommendations = head + tail
 
     # The safety statement always goes last, and always appears - an examiner
     # (or a hospital's clinical safety officer) should be able to see at a
@@ -317,6 +540,13 @@ def optimise(summary: dict, prices: dict) -> dict:
             "demandChargeMonthlySek": round(demand_saving_month, 0),
             "annualTotalSek": round(energy_saving * 365 + demand_saving_month * 12, 0),
             "peakReductionKw": round(peak_reduction_kw, 1),
+            # Signed. Negative means the plan raises the peak, which the
+            # dashboard must show rather than clamp away.
+            "peakDeltaKw": round(peak_delta_kw, 1),
+            # False when the energy bill would rise by more than the demand
+            # charge falls. The dashboard must not show a savings headline
+            # when this is False.
+            "planWorthApplying": plan_worth_applying,
             "shiftedKwh": round(total_shifted_kwh, 1),
             "co2SavedKgPerDay": round(co2_saved_g / 1000, 1),
             "co2SavedTonnesPerYear": round(co2_saved_g / 1000 * 365 / 1000, 1),
@@ -324,6 +554,26 @@ def optimise(summary: dict, prices: dict) -> dict:
         "consumption": {
             "totalKwh": round(total_kwh, 1),
             "avgPriceSekPerKwh": round(day_avg_price, 4),
+        },
+        # ---- Why the plan looks the way it does ---------------------------
+        # Exposing the working, not just the answer. The assistant service
+        # uses this to explain a recommendation instead of paraphrasing it,
+        # and an estates manager can audit the logic without reading code.
+        "reasoning": {
+            "reliefHours": sorted(relief_hours),
+            "reliefHoursLabel": format_hours(sorted(relief_hours)),
+            "receivingHours": receiving_hours,
+            "receivingHoursLabel": format_hours(receiving_hours),
+            "dayAvgPriceSekPerKwh": round(day_avg_price, 4),
+            "cheapestHour": hourly_price.index(min(hourly_price)),
+            "cheapestPrice": round(min(hourly_price), 4),
+            "dearestHour": hourly_price.index(max(hourly_price)),
+            "dearestPrice": round(max(hourly_price), 4),
+            "priceSpreadRatio": round(max(hourly_price) / min(hourly_price), 2) if min(hourly_price) else 0.0,
+            "sitePeakHour": baseline_hourly_total.index(max(baseline_hourly_total)),
+            "flexibilityUsed": capacity_table,
+            "demandChargeSekPerKwMonth": DEMAND_CHARGE_SEK_PER_KW_MONTH,
+            "protectedZones": protected_zones,
         },
         "recommendations": recommendations,
     }
@@ -399,9 +649,9 @@ def find_anomalies(summary: dict) -> list:
                     "excessKwh": round(excess_kwh, 1),
                     "severity": "high" if (ratio >= 2.0 or ratio <= 0.35) else "medium",
                     "text": (
-                        f"{z['name']} drew {v:,.0f} kWh at {h:02d}:00, but the hours either "
-                        f"side averaged only {neighbours:,.0f} kWh "
-                        f"({ratio:.1f}x expected). That is {abs(excess_kwh):,.0f} kWh "
+                        f"{z['name']} drew {grouped(v)} kWh at {h:02d}:00, but the hours "
+                        f"either side averaged only {grouped(neighbours)} kWh "
+                        f"({ratio:.1f}x expected). That is {grouped(abs(excess_kwh))} kWh "
                         f"{'more' if excess_kwh > 0 else 'less'} than the pattern predicts - "
                         f"worth a maintenance check."
                     ),
@@ -433,13 +683,54 @@ async def readyz():
 # ==========================================================================
 #  REST API
 # ==========================================================================
+def parse_flex(flex: str | None) -> dict:
+    """
+    Parse a what-if flexibility override: "laundry:0.9,catering:0.55".
+
+    Validated hard, because this is the one input that changes the answer:
+    only known deferrable zones, only fractions between 0 and 1, and never
+    a clinical zone. A caller cannot use this to make the optimiser touch
+    the ICU.
+    """
+    if not flex:
+        return {}
+    overrides = {}
+    for part in flex.split(","):
+        if ":" not in part:
+            raise ValueError(f"expected zone:fraction, got '{part}'")
+        zone, _, value = part.partition(":")
+        zone = zone.strip().lower()
+        if zone not in SHIFT_CAPACITY:
+            raise ValueError(
+                f"'{zone}' is not a deferrable zone. Valid: {', '.join(SHIFT_CAPACITY)}")
+        try:
+            fraction = float(value)
+        except ValueError:
+            raise ValueError(f"'{value}' is not a number")
+        if not 0.0 <= fraction <= 1.0:
+            raise ValueError("flexibility must be between 0 and 1")
+        overrides[zone] = fraction
+    return overrides
+
+
 @app.get("/api/optimize")
-async def optimize(area: str = Query(default="SE4", pattern="^SE[1-4]$")):
+async def optimize(
+    area: str = Query(default="SE4", pattern="^SE[1-4]$"),
+    flex: str | None = Query(default=None, max_length=200,
+                             description="What-if override, e.g. laundry:0.9,catering:0.55"),
+):
     """
     The headline endpoint. Returns the full optimisation plan.
 
     GET /api/optimize?area=SE4
+    GET /api/optimize?area=SE4&flex=laundry:0.9   <- what-if scenario
     """
+    try:
+        flex_overrides = parse_flex(flex)
+    except ValueError as exc:
+        return JSONResponse(status_code=400,
+                            content={"error": str(exc), "pod": POD})
+
     summary, prices = await gather_inputs(area)
 
     if isinstance(summary, Exception):
@@ -460,11 +751,13 @@ async def optimize(area: str = Query(default="SE4", pattern="^SE[1-4]$")):
             "hint": "POST /api/simulate on the ingest service to load a demo day",
             "pod": POD})
 
-    result = optimise(summary, prices)
+    result = optimise(summary, prices, flex_overrides)
     result.update({
         "pod": POD,
         "generatedAt": datetime.now(timezone.utc).isoformat(),
         "area": area,
+        "scenario": bool(flex_overrides),
+        "flexOverrides": flex_overrides,
         "priceSource": prices.get("source"),
         "priceStale": prices.get("stale", False),
         "servedBy": {"ingestPod": summary.get("pod"), "pricePod": prices.get("pod"), "optimizerPod": POD},
@@ -472,6 +765,63 @@ async def optimize(area: str = Query(default="SE4", pattern="^SE[1-4]$")):
     })
     log.info(f"optimisation computed: {result['savings']['dailySek']} SEK/day, "
              f"{result['savings']['dailyPct']}%")
+    return result
+
+
+class ScenarioZone(BaseModel):
+    zoneId: str
+    name: str = ""
+    critical: bool = False
+    shiftable: bool = False
+    baselineKw: float = Field(default=100.0, gt=0, le=100000)
+    description: str = ""
+    hourlyKwh: list[float] = Field(min_length=24, max_length=24)
+
+
+class ScenarioRequest(BaseModel):
+    """A load matrix and a price curve that did not come from our database."""
+    zones: list[ScenarioZone] = Field(min_length=1, max_length=100)
+    prices: list[float] = Field(min_length=24, max_length=24)
+    label: str = Field(default="scenario", max_length=80)
+
+
+@app.post("/api/optimize/scenario")
+async def optimize_scenario(req: ScenarioRequest):
+    """
+    Run the optimiser over a load matrix supplied by the caller instead of
+    over yesterday's measured data.
+
+    This is what lets the forecast service plan TOMORROW: it predicts the
+    load, fetches tomorrow's prices, and posts both here. The point is that
+    it reuses this exact engine rather than reimplementing it, so today's
+    report and tomorrow's plan can never drift apart in their logic.
+
+    Still read-only: nothing is stored, the answer is computed and returned.
+    """
+    for z in req.zones:
+        for v in z.hourlyKwh:
+            if v < 0 or v > 100000:
+                return JSONResponse(status_code=400, content={
+                    "error": f"hourlyKwh out of range in zone {z.zoneId}", "pod": POD})
+    for v in req.prices:
+        if v < -10 or v > 100:
+            return JSONResponse(status_code=400, content={
+                "error": "price out of plausible range", "pod": POD})
+
+    summary = {"zones": [z.model_dump() for z in req.zones],
+               "totalKwh": sum(sum(z.hourlyKwh) for z in req.zones)}
+    prices = {"hourly": req.prices}
+
+    result = optimise(summary, prices)
+    result.update({
+        "pod": POD,
+        "generatedAt": datetime.now(timezone.utc).isoformat(),
+        "label": req.label,
+        "scenario": True,
+        "prices": req.prices,
+    })
+    log.info(f"scenario optimisation '{req.label}': "
+             f"{result['savings']['dailySek']} SEK/day")
     return result
 
 

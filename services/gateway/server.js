@@ -32,6 +32,8 @@ const POD = process.env.POD_NAME || os.hostname();
 const INGEST_URL = process.env.INGEST_URL || 'http://localhost:8081';
 const PRICE_URL = process.env.PRICE_URL || 'http://localhost:8082';
 const OPTIMIZER_URL = process.env.OPTIMIZER_URL || 'http://localhost:8083';
+const ASSISTANT_URL = process.env.ASSISTANT_URL || 'http://localhost:8084';
+const FORECAST_URL = process.env.FORECAST_URL || 'http://localhost:8085';
 const UPSTREAM_TIMEOUT_MS = parseInt(process.env.UPSTREAM_TIMEOUT_MS || '8000', 10);
 
 function log(level, message, extra = {}) {
@@ -156,7 +158,8 @@ app.post('/api/simulate', (req, res) => proxy(res, `${INGEST_URL}/api/simulate`,
 // ===========================================================================
 app.get('/api/prices', (req, res) => {
   const area = encodeURIComponent(req.query.area || 'SE4');
-  return proxy(res, `${PRICE_URL}/api/prices?area=${area}`);
+  const day = req.query.day === 'tomorrow' ? '&day=tomorrow' : '';
+  return proxy(res, `${PRICE_URL}/api/prices?area=${area}${day}`);
 });
 
 app.get('/api/prices/cheapest-window', (req, res) => {
@@ -170,10 +173,43 @@ app.get('/api/prices/cheapest-window', (req, res) => {
 // ===========================================================================
 app.get('/api/optimize', (req, res) => {
   const area = encodeURIComponent(req.query.area || 'SE4');
-  return proxy(res, `${OPTIMIZER_URL}/api/optimize?area=${area}`);
+  // Optional what-if override, e.g. flex=laundry:0.9. The optimizer validates
+  // it strictly (known deferrable zones only, never a clinical one), so the
+  // gateway just needs to pass it through safely encoded.
+  const flex = req.query.flex ? `&flex=${encodeURIComponent(req.query.flex)}` : '';
+  return proxy(res, `${OPTIMIZER_URL}/api/optimize?area=${area}${flex}`);
 });
 
 app.get('/api/anomalies', (req, res) => proxy(res, `${OPTIMIZER_URL}/api/anomalies`));
+
+// ===========================================================================
+//  ROUTES -> ASSISTANT SERVICE
+//  The assistant is read-only by design, but this is still a POST because
+//  the question goes in the body rather than the URL - a question can be
+//  long, and putting user text in a query string means it ends up in every
+//  access log along the way.
+// ===========================================================================
+app.post('/api/chat', (req, res) => proxy(res, `${ASSISTANT_URL}/api/chat`, {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify(req.body || {})
+}));
+
+app.get('/api/chat/suggestions', (req, res) =>
+  proxy(res, `${ASSISTANT_URL}/api/chat/suggestions`));
+
+// ===========================================================================
+//  ROUTES -> FORECAST SERVICE
+//  Everything else in the platform describes yesterday. These describe
+//  tomorrow, which is the difference between a report and a plan.
+// ===========================================================================
+app.get('/api/forecast/weather', (req, res) =>
+  proxy(res, `${FORECAST_URL}/api/forecast/weather`));
+
+app.get('/api/forecast/plan', (req, res) => {
+  const area = encodeURIComponent(req.query.area || 'SE4');
+  return proxy(res, `${FORECAST_URL}/api/forecast/plan?area=${area}`);
+});
 
 // ===========================================================================
 //  TOPOLOGY - "who is actually running right now?"
@@ -185,7 +221,9 @@ app.get('/api/topology', async (req, res) => {
   const targets = [
     { name: 'ingest', url: `${INGEST_URL}/healthz` },
     { name: 'price', url: `${PRICE_URL}/healthz` },
-    { name: 'optimizer', url: `${OPTIMIZER_URL}/healthz` }
+    { name: 'optimizer', url: `${OPTIMIZER_URL}/healthz` },
+    { name: 'assistant', url: `${ASSISTANT_URL}/healthz` },
+    { name: 'forecast', url: `${FORECAST_URL}/healthz` }
   ];
 
   const results = await Promise.all(targets.map(async (t) => {

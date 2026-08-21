@@ -1,21 +1,33 @@
 # ===========================================================================
-#  PRICE SERVICE - fetches live electricity prices from the public internet
+#  ASSISTANT SERVICE - the natural-language layer
 #
-#  This is the only service that is allowed to make outbound calls to the
-#  internet (see 07-network-policy.yaml). Everything else is sealed in.
+#  This is the fifth microservice, and it follows exactly the same rules as
+#  the other four: stateless, ClusterIP only, no database of its own, and it
+#  reaches its siblings over REST through Kubernetes DNS.
+#
+#  Two things about it are deliberate and worth saying out loud:
+#
+#  1) It is READ-ONLY. It has no tool that writes anything. In a clinical
+#     setting, a natural-language layer that can change state is a liability.
+#
+#  2) It works with NO external dependency. The default engine is
+#     deterministic intent matching over our own APIs, so it needs no LLM
+#     key, no internet and no per-question cost, and it cannot hallucinate a
+#     number. An LLM is optional and only rephrases an answer that has
+#     already been computed from real data.
 # ===========================================================================
 ---
 apiVersion: v1
 kind: Service
 metadata:
-  name: price-service
+  name: assistant-service
   namespace: medimatrx
   labels:
-    app: price
+    app: assistant
 spec:
   type: ClusterIP
   selector:
-    app: price
+    app: assistant
   ports:
     - name: http
       port: 8080
@@ -25,17 +37,17 @@ spec:
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: price
+  name: assistant
   namespace: medimatrx
   labels:
-    app: price
+    app: assistant
     app.kubernetes.io/component: backend
 spec:
   replicas: 2
   revisionHistoryLimit: 3
   selector:
     matchLabels:
-      app: price
+      app: assistant
   strategy:
     type: RollingUpdate
     rollingUpdate:
@@ -44,7 +56,7 @@ spec:
   template:
     metadata:
       labels:
-        app: price
+        app: assistant
     spec:
       securityContext:
         runAsNonRoot: true
@@ -57,11 +69,11 @@ spec:
               podAffinityTerm:
                 labelSelector:
                   matchLabels:
-                    app: price
+                    app: assistant
                 topologyKey: kubernetes.io/hostname
       containers:
-        - name: price
-          image: abhinavannareddy/medimatrx-price:1.2.0
+        - name: assistant
+          image: abhinavannareddy/medimatrx-assistant:1.2.0
           imagePullPolicy: IfNotPresent
           ports:
             - name: http
@@ -71,6 +83,34 @@ spec:
               valueFrom:
                 fieldRef:
                   fieldPath: metadata.name
+            # --- Optional LLM key -------------------------------------------
+            # optional: true means the pod starts perfectly well when this
+            # Secret does not exist, which is the normal case. The assistant
+            # then runs its deterministic engine and nothing is degraded.
+            #
+            # To switch an LLM on later:
+            #   kubectl create secret generic medimatrx-llm -n medimatrx \
+            #     --from-literal=LLM_API_KEY=sk-... \
+            #     --from-literal=LLM_PROVIDER=anthropic
+            #   kubectl rollout restart deployment/assistant -n medimatrx
+            - name: LLM_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: medimatrx-llm
+                  key: LLM_API_KEY
+                  optional: true
+            - name: LLM_PROVIDER
+              valueFrom:
+                secretKeyRef:
+                  name: medimatrx-llm
+                  key: LLM_PROVIDER
+                  optional: true
+            - name: LLM_MODEL
+              valueFrom:
+                secretKeyRef:
+                  name: medimatrx-llm
+                  key: LLM_MODEL
+                  optional: true
           envFrom:
             - configMapRef:
                 name: medimatrx-config
@@ -101,8 +141,6 @@ spec:
             capabilities:
               drop: ["ALL"]
 
-          # The root filesystem is read-only, so give the process one small
-          # scratch area for temporary files.
           volumeMounts:
             - name: tmp
               mountPath: /tmp

@@ -94,10 +94,20 @@
     border-radius: 13px; padding: 17px 18px;
   }
   .tile .label { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; }
-  .tile .value { font-size: 29px; font-weight: 650; margin: 9px 0 3px; letter-spacing: -0.02em; }
+  /* Figures never wrap. Long ones step down a size instead, because a
+     truncated money figure is worse than a slightly smaller one. */
+  .tile .value { font-size: 29px; font-weight: 650; margin: 9px 0 3px; letter-spacing: -0.02em;
+                 white-space: nowrap; }
+  .tile .value.long { font-size: 24px; }
   .tile .note { font-size: 12.5px; color: var(--ink-2); }
   .tile.hero { background: linear-gradient(150deg, #16324f, var(--surface) 62%); border-color: rgba(57,135,229,0.4); }
   .tile.hero .value { font-size: 37px; }
+  .tile.hero .value.long { font-size: 29px; }
+  /* A tile turns red when the number is bad news: the plan raises the site
+     peak, or costs more than it saves. Never let a regression read as calm. */
+  .tile.bad { background: rgba(208,59,59,0.10); border-color: rgba(208,59,59,0.45); }
+  .tile.bad .value { color: var(--critical); }
+  .tile.bad .label { color: var(--critical); }
 
   /* ---------- cards ---------- */
   .card {
@@ -167,6 +177,71 @@
   .pod .name { color: var(--muted); font-size: 11.5px; text-transform: uppercase; letter-spacing: .06em; }
   .pod .host { font-family: ui-monospace, "Cascadia Mono", Consolas, monospace; margin-top: 6px; word-break: break-all; font-size: 12px; }
 
+  /* ---------- tomorrow ---------- */
+  .conf {
+    font-size: 10.5px; font-weight: 700; text-transform: uppercase;
+    letter-spacing: .06em; padding: 3px 9px; border-radius: 6px;
+    margin-left: 9px; vertical-align: middle;
+  }
+  .conf.high   { background: rgba(12,163,12,.16);  color: var(--good);    border: 1px solid rgba(12,163,12,.4); }
+  .conf.medium { background: rgba(250,178,25,.14); color: var(--warning); border: 1px solid rgba(250,178,25,.4); }
+  .conf.low    { background: rgba(236,131,90,.14); color: var(--serious); border: 1px solid rgba(236,131,90,.4); }
+
+  .fc-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin-bottom: 16px; }
+  .fc-cell { background: var(--surface-2); border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; }
+  .fc-cell .k { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; }
+  .fc-cell .v { font-size: 20px; font-weight: 640; margin-top: 5px; letter-spacing: -.01em; }
+  .fc-cell .s { font-size: 11.5px; color: var(--ink-2); margin-top: 3px; }
+
+  .caveat {
+    font-size: 12.5px; color: var(--ink-2); background: rgba(236,131,90,.08);
+    border-left: 3px solid var(--serious); border-radius: 0 7px 7px 0;
+    padding: 9px 13px; margin-top: 12px; line-height: 1.55;
+  }
+
+  /* ---------- assistant ---------- */
+  .chat-log {
+    max-height: 380px; overflow-y: auto; padding: 4px 2px 10px;
+    display: flex; flex-direction: column; gap: 12px;
+  }
+  .msg { display: flex; }
+  .msg.user { justify-content: flex-end; }
+  .bubble {
+    max-width: 78%; padding: 11px 14px; border-radius: 12px;
+    font-size: 13.5px; line-height: 1.6; white-space: pre-wrap; word-wrap: break-word;
+  }
+  .msg.bot .bubble { background: var(--surface-2); border: 1px solid var(--border); }
+  .msg.user .bubble { background: var(--optimised); color: #fff; }
+  .bubble strong { font-weight: 680; }
+  .bubble em { color: var(--muted); font-style: normal; }
+  .bubble code {
+    font-family: ui-monospace, "Cascadia Mono", Consolas, monospace;
+    font-size: 12px; background: rgba(255,255,255,.07); padding: 1px 5px; border-radius: 4px;
+  }
+  .bubble ul { margin: 6px 0 0; padding-left: 18px; }
+  .bubble li { margin-bottom: 4px; }
+  .src {
+    margin-top: 9px; padding-top: 7px; border-top: 1px solid var(--border);
+    font-size: 11px; color: var(--muted);
+  }
+  .msg.bot .bubble.thinking { color: var(--muted); font-style: italic; }
+
+  .chips { display: flex; flex-wrap: wrap; gap: 7px; margin: 12px 0 10px; }
+  .chip {
+    font-size: 12px; padding: 6px 11px; border-radius: 999px;
+    border: 1px solid var(--border); background: var(--surface-2);
+    color: var(--ink-2); cursor: pointer;
+  }
+  .chip:hover { border-color: var(--optimised); color: var(--ink); }
+
+  .chat-input { display: flex; gap: 8px; }
+  .chat-input input {
+    flex: 1; font: inherit; font-size: 13.5px; padding: 10px 13px;
+    background: var(--surface-2); color: var(--ink);
+    border: 1px solid var(--border); border-radius: 9px;
+  }
+  .chat-input input:focus { outline: none; border-color: var(--optimised); }
+
   .toggle { background: none; border: none; color: var(--optimised); padding: 0; font-size: 12.5px; text-decoration: underline; }
   .hidden { display: none; }
   .err { color: var(--critical); font-size: 13.5px; }
@@ -181,7 +256,7 @@
       <div class="mark">M</div>
       <div>
         <h1>MediMatrx</h1>
-        <div class="sub">Energy optimisation platform · Blekinge Regional Hospital (demo site)</div>
+        <div class="sub">Energy optimisation platform</div>
       </div>
     </div>
     <div class="controls">
@@ -238,6 +313,44 @@
       <p class="desc">Hours where a zone drew far more or far less power than its own normal pattern.</p>
       <ul class="items" id="anomalies"></ul>
     </div>
+  </div>
+
+  <!-- ============ TOMORROW ============ -->
+  <div class="card">
+    <h2>Tomorrow's plan <span class="conf" id="fc-conf"></span></h2>
+    <p class="desc">
+      Everything above describes today. This is what to do next, built from the
+      weather forecast and tomorrow's day-ahead prices.
+    </p>
+    <div id="forecast-body">
+      <p style="color:var(--muted);font-size:13px">Loading tomorrow's plan...</p>
+    </div>
+  </div>
+
+  <!-- ============ ASSISTANT ============ -->
+  <div class="card">
+    <h2>Ask MediMatrx</h2>
+    <p class="desc">
+      Every number in an answer is fetched live from this platform's own APIs.
+      The assistant is read-only and cannot change anything.
+    </p>
+
+    <div id="chat-log" class="chat-log">
+      <div class="msg bot">
+        <div class="bubble">
+          Ask me about savings, consumption, prices, equipment faults, or run a
+          what-if scenario. I will show you which service each answer came from.
+        </div>
+      </div>
+    </div>
+
+    <div class="chips" id="chat-chips"></div>
+
+    <form class="chat-input" id="chat-form" autocomplete="off">
+      <input id="chat-text" type="text" maxlength="500"
+             placeholder="e.g. why move the laundry to the night?" aria-label="Ask a question">
+      <button type="submit" class="primary" id="chat-send">Ask</button>
+    </form>
   </div>
 
   <!-- ============ ZONES ============ -->
@@ -345,18 +458,43 @@ function escapeHtml(s) {
 
 // Big money is easier to read as "1,39 Mkr" than as "1 390 220 kr".
 function compactSek(v) {
-  return v >= 1e6 ? nf2.format(v / 1e6) + ' Mkr' : nf0.format(v) + ' kr';
+  // Used only for the hero tile, which is the narrowest place a big number
+  // has to live. Compare on MAGNITUDE so a large negative compacts too:
+  // without that, a net-negative day renders "-465 535 kr", which is too
+  // wide for the tile. Six figures and up become Mkr, which keeps every
+  // realistic annual figure to about seven characters.
+  return Math.abs(v) >= 1e5 ? nf2.format(v / 1e6) + ' Mkr' : nf0.format(v) + ' kr';
 }
 
 /* ---------------- KPI tiles ---------------- */
 function renderTiles(o) {
   const s = o.savings;
+
+  // The peak figure is shown SIGNED. If a plan ever raises the site peak the
+  // tile has to say so, because the grid demand charge is billed on the
+  // single highest hour of the month and an increase there can cost more
+  // than the whole energy saving is worth. Displaying max(delta, 0) would
+  // turn a costly regression into a reassuring "0 kW".
+  const peakDelta = (s.peakDeltaKw !== undefined) ? s.peakDeltaKw : s.peakReductionKw;
+  const peakRises = peakDelta < -0.5;
+
+  // Likewise, no savings headline on a day when the plan is not worth
+  // applying. Better to show nothing than to show a number someone acts on.
+  const notWorth = s.planWorthApplying === false;
+
   const tiles = [
-    { hero: true, label: 'Annual saving', value: compactSek(s.annualTotalSek),
-      note: `${nf0.format(s.dailySek)} kr/day on energy + ${nf0.format(s.demandChargeMonthlySek)} kr/month on grid demand charges` },
+    { hero: true, label: notWorth ? 'Net effect' : 'Annual saving',
+      value: compactSek(s.annualTotalSek),
+      bad: notWorth,
+      note: notWorth
+        ? 'shifting load would cost more than it saves today, see below'
+        : `${nf0.format(s.dailySek)} kr/day on energy + ${nf0.format(s.demandChargeMonthlySek)} kr/month on grid demand charges` },
     { label: 'Energy cost cut', value: nf1.format(s.dailyPct) + ' %',
+      bad: s.dailyPct < 0,
       note: `${nf0.format(o.baseline.costSek)} kr → ${nf0.format(o.optimised.costSek)} kr today` },
-    { label: 'Peak demand cut', value: nf0.format(s.peakReductionKw) + ' kW',
+    { label: peakRises ? 'Peak demand RISE' : 'Peak demand cut',
+      value: nf0.format(Math.abs(peakDelta)) + ' kW',
+      bad: peakRises,
       note: `site peak ${nf0.format(o.baseline.peakKw)} → ${nf0.format(o.optimised.peakKw)} kW` },
     { label: 'Load shifted', value: nf0.format(s.shiftedKwh) + ' kWh',
       note: 'moved out of peak-price hours, clinical load untouched' },
@@ -364,9 +502,9 @@ function renderTiles(o) {
       note: `CO₂ per year (${nf0.format(s.co2SavedKgPerDay)} kg/day)` }
   ];
   $('tiles').innerHTML = tiles.map(t => `
-    <div class="tile${t.hero ? ' hero' : ''}">
+    <div class="tile${t.hero ? ' hero' : ''}${t.bad ? ' bad' : ''}">
       <div class="label">${t.label}</div>
-      <div class="value">${t.value}</div>
+      <div class="value${String(t.value).length > 8 ? ' long' : ''}">${t.value}</div>
       <div class="note">${t.note}</div>
     </div>`).join('');
 }
@@ -524,8 +662,19 @@ function renderTable(o) {
 
 /* ---------------- lists ---------------- */
 function renderRecs(recs) {
+  // A warning must never wear the same green pill as a good recommendation.
+  // The optimizer marks these two actions as high priority because they are
+  // urgent, not because they are good news, so the colour comes from the
+  // action, not from the priority.
+  const pillFor = (r) =>
+    (r.action === 'no-action' || r.action === 'peak-warning') ? 'critical' : r.priority;
+  const labelFor = (r) =>
+    r.action === 'no-action' ? 'do nothing'
+      : r.action === 'peak-warning' ? 'warning'
+      : r.priority;
+
   $('recs').innerHTML = recs.length ? recs.map(r => `
-    <li><span class="pill ${r.priority}">${r.priority}</span>
+    <li><span class="pill ${pillFor(r)}">${labelFor(r)}</span>
         <span>${escapeHtml(r.text)}</span></li>`).join('')
     : '<li>No recommendations yet.</li>';
 }
@@ -568,7 +717,7 @@ function renderPods(topology, o) {
 
 /* ---------------- wiring ---------------- */
 $('refresh').addEventListener('click', load);
-$('area').addEventListener('change', load);
+$('area').addEventListener('change', () => { load(); loadForecast(); });
 
 $('seed').addEventListener('click', async () => {
   $('seed').disabled = true;
@@ -589,8 +738,161 @@ $('table-toggle').addEventListener('click', () => {
     ? 'Show the numbers as a table' : 'Hide the table';
 });
 
+/* =======================================================================
+   Tomorrow's plan.
+
+   Loaded separately from the main dashboard, and deliberately allowed to
+   fail on its own: a forecast is a nice-to-have, so if the forecast service
+   is down the rest of the page must carry on working as if nothing had
+   happened. That is the bulkhead pattern applied in the browser.
+   ======================================================================= */
+async function loadForecast() {
+  const body = $('forecast-body'), badge = $('fc-conf');
+  try {
+    const d = await getJSON(`/api/forecast/plan?area=${$('area').value}`);
+    const w = d.weather, p = d.prediction, s = d.savings;
+
+    badge.textContent = d.confidence + ' confidence';
+    badge.className = 'conf ' + d.confidence;
+
+    const cell = (k, v, sub) =>
+      `<div class="fc-cell"><div class="k">${k}</div><div class="v">${v}</div>
+       <div class="s">${sub}</div></div>`;
+
+    body.innerHTML = `
+      <div class="fc-grid">
+        ${cell('Date', d.forDate,
+               `${w.tomorrowMin.toFixed(0)} to ${w.tomorrowMax.toFixed(0)} &deg;C forecast`)}
+        ${cell('Predicted use', nf0.format(p.totalPredictedKwh) + ' kWh',
+               `${p.predictedChangePct >= 0 ? '+' : ''}${nf1.format(p.predictedChangePct)} % vs today, weather adjusted`)}
+        ${cell('Plan saves', nf0.format(s.dailySek) + ' kr',
+               `${nf1.format(s.dailyPct)} % of tomorrow's energy bill`)}
+        ${cell('Peak cut', nf0.format(s.peakReductionKw) + ' kW',
+               `${nf0.format(s.shiftedKwh)} kWh moved`)}
+      </div>
+      <ul class="items">
+        ${(d.recommendations || []).filter(r => r.action === 'shift').slice(0, 4)
+          .map(r => `<li><span class="pill ${r.priority}">${r.priority}</span>
+                     <span>${escapeHtml(r.text)}</span></li>`).join('')}
+      </ul>
+      ${(d.caveats || []).map(c => `<div class="caveat">${escapeHtml(c)}</div>`).join('')}
+      <p style="font-size:11.5px;color:var(--muted);margin-top:12px">
+        Weather: ${escapeHtml(w.source)} &middot; prices: ${escapeHtml(d.priceSource || 'n/a')}
+        &middot; load predicted by ${escapeHtml(p.method)}
+        &middot; planned by <code>${escapeHtml(d.forecastPod || '')}</code>
+      </p>`;
+
+  } catch (err) {
+    badge.textContent = '';
+    badge.className = 'conf';
+    body.innerHTML = `<p style="color:var(--muted);font-size:13px">
+      Tomorrow's plan is unavailable right now (${escapeHtml(err.message)}).
+      The rest of this dashboard is unaffected.</p>`;
+  }
+}
+
+/* =======================================================================
+   The assistant panel.
+
+   Note what this does NOT do: it never formats a number itself and never
+   interprets the data. It posts the question to the gateway, and renders
+   the sentence the assistant service returns. All the reasoning lives on
+   the server, where it can be audited.
+   ======================================================================= */
+
+// A deliberately tiny markdown renderer. Only bold, italics, inline code and
+// bullets - because that is all the assistant emits, and a full markdown
+// library would be a dependency we do not need. Everything is escaped first,
+// so a hostile string cannot become markup.
+function miniMarkdown(text) {
+  const lines = escapeHtml(text).split('\n');
+  let html = '', inList = false;
+  for (const raw of lines) {
+    const line = raw.trimEnd();
+    const isBullet = /^\s*-\s+/.test(line);
+    if (isBullet && !inList) { html += '<ul>'; inList = true; }
+    if (!isBullet && inList) { html += '</ul>'; inList = false; }
+    const body = isBullet ? line.replace(/^\s*-\s+/, '') : line;
+    const styled = body
+      .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+      .replace(/`(.+?)`/g, '<code>$1</code>')
+      .replace(/_(.+?)_/g, '<em>$1</em>');
+    html += isBullet ? `<li>${styled}</li>` : (line ? `${styled}<br>` : '<br>');
+  }
+  if (inList) html += '</ul>';
+  return html;
+}
+
+function addMessage(who, html) {
+  const log = $('chat-log');
+  const wrap = document.createElement('div');
+  wrap.className = `msg ${who}`;
+  wrap.innerHTML = `<div class="bubble">${html}</div>`;
+  log.appendChild(wrap);
+  log.scrollTop = log.scrollHeight;
+  return wrap;
+}
+
+async function askAssistant(question) {
+  addMessage('user', escapeHtml(question));
+  const pending = addMessage('bot', 'checking the live data...');
+  pending.querySelector('.bubble').classList.add('thinking');
+
+  try {
+    const r = await fetch('/api/chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ message: question, area: $('area').value })
+    });
+    const d = await r.json();
+    const bubble = pending.querySelector('.bubble');
+    bubble.classList.remove('thinking');
+
+    if (!r.ok) {
+      bubble.innerHTML = escapeHtml(d.error || 'Something went wrong.');
+      return;
+    }
+
+    let html = miniMarkdown(d.reply);
+    if (d.sources && d.sources.length) {
+      html += `<div class="src">Source: ${escapeHtml(d.sources.join(' · '))}` +
+              ` &nbsp;·&nbsp; answered by <code>${escapeHtml(d.pod || '')}</code>` +
+              ` &nbsp;·&nbsp; ${escapeHtml(d.engine || '')}</div>`;
+    }
+    bubble.innerHTML = html;
+    $('chat-log').scrollTop = $('chat-log').scrollHeight;
+
+  } catch (err) {
+    const bubble = pending.querySelector('.bubble');
+    bubble.classList.remove('thinking');
+    bubble.innerHTML = 'I could not reach the assistant service. ' + escapeHtml(err.message);
+  }
+}
+
+$('chat-form').addEventListener('submit', (e) => {
+  e.preventDefault();
+  const text = $('chat-text').value.trim();
+  if (!text) return;
+  $('chat-text').value = '';
+  askAssistant(text);
+});
+
+// Starter questions come from the assistant service, so the suggestions and
+// the thing that answers them can never drift apart.
+(async () => {
+  try {
+    const { suggestions } = await getJSON('/api/chat/suggestions');
+    $('chat-chips').innerHTML = (suggestions || [])
+      .map(s => `<button type="button" class="chip">${escapeHtml(s)}</button>`).join('');
+    $('chat-chips').querySelectorAll('.chip').forEach(chip =>
+      chip.addEventListener('click', () => askAssistant(chip.textContent)));
+  } catch { /* the panel still works, you just type your own question */ }
+})();
+
 load();
-setInterval(load, 60000);   // keep the wall-board fresh
+loadForecast();
+setInterval(load, 60000);           // keep the wall-board fresh
+setInterval(loadForecast, 900000);  // a forecast does not change every minute
 </script>
 </body>
 </html>

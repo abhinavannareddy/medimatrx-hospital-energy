@@ -68,6 +68,40 @@ services:
       - ingest
       - price
 
+  assistant:
+    build: ./services/assistant
+    container_name: medimatrx-assistant
+    environment:
+      POD_NAME: "assistant-local-1"
+      INGEST_URL: "http://ingest:8080"
+      PRICE_URL: "http://price:8080"
+      OPTIMIZER_URL: "http://optimizer:8080"
+      TZ: "Europe/Stockholm"
+      # Optional. Leave unset and the deterministic engine is used.
+      # LLM_PROVIDER: "anthropic"
+      # LLM_API_KEY: "sk-..."
+    depends_on:
+      - ingest
+      - price
+      - optimizer
+
+  forecast:
+    build: ./services/forecast
+    container_name: medimatrx-forecast
+    environment:
+      POD_NAME: "forecast-local-1"
+      INGEST_URL: "http://ingest:8080"
+      PRICE_URL: "http://price:8080"
+      OPTIMIZER_URL: "http://optimizer:8080"
+      SITE_NAME: "Blekinge Regional Hospital"
+      SITE_LAT: "56.1612"
+      SITE_LON: "15.5869"
+      TZ: "Europe/Stockholm"
+    depends_on:
+      - ingest
+      - price
+      - optimizer
+
   gateway:
     build: ./services/gateway
     container_name: medimatrx-gateway
@@ -80,12 +114,16 @@ services:
       INGEST_URL: "http://ingest:8080"
       PRICE_URL: "http://price:8080"
       OPTIMIZER_URL: "http://optimizer:8080"
+      ASSISTANT_URL: "http://assistant:8080"
+      FORECAST_URL: "http://forecast:8080"
       RATE_LIMIT: "600"
       TZ: "Europe/Stockholm"
     depends_on:
       - ingest
       - price
       - optimizer
+      - assistant
+      - forecast
 
 volumes:
   mongo-data:

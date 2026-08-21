@@ -1,21 +1,30 @@
 # ===========================================================================
-#  PRICE SERVICE - fetches live electricity prices from the public internet
+#  FORECAST SERVICE - the one that talks about tomorrow
 #
-#  This is the only service that is allowed to make outbound calls to the
-#  internet (see 07-network-policy.yaml). Everything else is sealed in.
+#  Every other service in this platform describes what already happened.
+#  This one predicts tomorrow's load from the weather forecast, fetches
+#  tomorrow's day-ahead prices, and asks the optimizer to plan against them.
+#
+#  Note it does NOT contain a copy of the optimisation algorithm. It posts
+#  the predicted load to the optimizer's scenario endpoint, so today's report
+#  and tomorrow's plan come out of the same engine and cannot drift apart.
+#
+#  Like the price service, this one needs the public internet (Open-Meteo),
+#  which is why it gets its own egress rule in the network policy. It is the
+#  second and last pod in the system allowed out.
 # ===========================================================================
 ---
 apiVersion: v1
 kind: Service
 metadata:
-  name: price-service
+  name: forecast-service
   namespace: medimatrx
   labels:
-    app: price
+    app: forecast
 spec:
   type: ClusterIP
   selector:
-    app: price
+    app: forecast
   ports:
     - name: http
       port: 8080
@@ -25,17 +34,17 @@ spec:
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: price
+  name: forecast
   namespace: medimatrx
   labels:
-    app: price
+    app: forecast
     app.kubernetes.io/component: backend
 spec:
   replicas: 2
   revisionHistoryLimit: 3
   selector:
     matchLabels:
-      app: price
+      app: forecast
   strategy:
     type: RollingUpdate
     rollingUpdate:
@@ -44,7 +53,7 @@ spec:
   template:
     metadata:
       labels:
-        app: price
+        app: forecast
     spec:
       securityContext:
         runAsNonRoot: true
@@ -57,11 +66,11 @@ spec:
               podAffinityTerm:
                 labelSelector:
                   matchLabels:
-                    app: price
+                    app: forecast
                 topologyKey: kubernetes.io/hostname
       containers:
-        - name: price
-          image: abhinavannareddy/medimatrx-price:1.2.0
+        - name: forecast
+          image: abhinavannareddy/medimatrx-forecast:1.2.0
           imagePullPolicy: IfNotPresent
           ports:
             - name: http
@@ -101,8 +110,6 @@ spec:
             capabilities:
               drop: ["ALL"]
 
-          # The root filesystem is read-only, so give the process one small
-          # scratch area for temporary files.
           volumeMounts:
             - name: tmp
               mountPath: /tmp

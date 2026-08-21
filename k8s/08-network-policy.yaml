@@ -105,6 +105,12 @@ spec:
         - podSelector:
             matchLabels:
               app: optimizer
+        - podSelector:
+            matchLabels:
+              app: assistant
+        - podSelector:
+            matchLabels:
+              app: forecast
       ports:
         - protocol: TCP
           port: 8080
@@ -130,6 +136,12 @@ spec:
         - podSelector:
             matchLabels:
               app: optimizer
+        - podSelector:
+            matchLabels:
+              app: assistant
+        - podSelector:
+            matchLabels:
+              app: forecast
       ports:
         - protocol: TCP
           port: 8080
@@ -200,6 +212,12 @@ spec:
         - podSelector:
             matchLabels:
               app: optimizer
+        - podSelector:
+            matchLabels:
+              app: assistant
+        - podSelector:
+            matchLabels:
+              app: forecast
       ports:
         - protocol: TCP
           port: 8080
@@ -249,6 +267,12 @@ spec:
         - podSelector:
             matchLabels:
               app: gateway
+        - podSelector:
+            matchLabels:
+              app: assistant
+        - podSelector:
+            matchLabels:
+              app: forecast
       ports:
         - protocol: TCP
           port: 8080
@@ -263,3 +287,103 @@ spec:
       ports:
         - protocol: TCP
           port: 8080
+
+---
+# ---- 11. The assistant: who may call it, and who it may call ------------
+# It receives only from the gateway, and it reaches only the three services
+# it needs to answer questions. Note there is NO internet egress rule here:
+# the deterministic engine needs none. If you enable an optional LLM you
+# must add an egress rule for port 443, and that is a deliberate, visible,
+# reviewable decision rather than something that quietly already worked.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: assistant-policy
+  namespace: medimatrx
+spec:
+  podSelector:
+    matchLabels:
+      app: assistant
+  policyTypes: [Ingress, Egress]
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: gateway
+      ports:
+        - protocol: TCP
+          port: 8080
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              app: ingest
+        - podSelector:
+            matchLabels:
+              app: price
+        - podSelector:
+            matchLabels:
+              app: optimizer
+      ports:
+        - protocol: TCP
+          port: 8080
+
+# To enable an optional LLM, add this block to the egress list above:
+#     - to:
+#         - ipBlock:
+#             cidr: 0.0.0.0/0
+#             except: [10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16]
+#       ports:
+#         - protocol: TCP
+#           port: 443
+
+---
+# ---- 12. The forecast service -------------------------------------------
+# Reached only by the gateway. Reaches its three siblings, plus the public
+# internet on 443 for the weather API. It is the second and last pod allowed
+# out of the cluster, and the private address ranges are excluded so that
+# "outbound to the internet" cannot quietly become "outbound to the
+# hospital's internal network", which is how a compromised container
+# normally pivots.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: forecast-policy
+  namespace: medimatrx
+spec:
+  podSelector:
+    matchLabels:
+      app: forecast
+  policyTypes: [Ingress, Egress]
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: gateway
+      ports:
+        - protocol: TCP
+          port: 8080
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              app: ingest
+        - podSelector:
+            matchLabels:
+              app: price
+        - podSelector:
+            matchLabels:
+              app: optimizer
+      ports:
+        - protocol: TCP
+          port: 8080
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            except:
+              - 10.0.0.0/8
+              - 172.16.0.0/12
+              - 192.168.0.0/16
+      ports:
+        - protocol: TCP
+          port: 443

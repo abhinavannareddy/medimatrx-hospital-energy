@@ -158,6 +158,54 @@ spec:
           periodSeconds: 20
 
 ---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: assistant-hpa
+  namespace: medimatrx
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: assistant
+  minReplicas: 2
+  # The assistant is stateless and cheap per question, but each question can
+  # fan out into two optimizer calls (a what-if compares baseline against
+  # scenario), so it is given room to grow.
+  maxReplicas: 10
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 60
+
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: forecast-hpa
+  namespace: medimatrx
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: forecast
+  minReplicas: 2
+  # Capped low on purpose, for the same reason as the price service: each
+  # replica keeps its own weather cache, so more pods means more calls to a
+  # free public API. Shared caching would be the fix before raising this.
+  maxReplicas: 4
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 65
+
+---
 # ===========================================================================
 #  POD DISRUPTION BUDGETS
 #
@@ -203,3 +251,27 @@ spec:
   selector:
     matchLabels:
       app: optimizer
+
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: assistant-pdb
+  namespace: medimatrx
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: assistant
+
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: forecast-pdb
+  namespace: medimatrx
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: forecast

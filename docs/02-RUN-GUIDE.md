@@ -64,7 +64,7 @@ If it says `Ready`, you are good. If it says it cannot connect, go back to Step 
 
 ## Step 3: Build the images and put them on Docker Hub
 
-This turns your four services into container images and publishes them so that
+This turns your six services into container images and publishes them so that
 Kubernetes can download them.
 
 Type this exactly:
@@ -82,13 +82,13 @@ The script will:
 2. **Ask you for your Docker Hub username.** Type it in lowercase and press Enter.
 3. **Ask you to log in.** Type your Docker Hub password. **You will not see the
    characters appear as you type. That is normal.** Press Enter.
-4. Build and push all four images. This takes **5-10 minutes** the first time
+4. Build and push all six images. This takes **5-10 minutes** the first time
    because it downloads the Node.js and Python base images.
 5. Automatically update the Kubernetes files to point at *your* images.
 
-You are finished when you see **"DONE. All four images are on Docker Hub."**
+You are finished when you see **"DONE. All 6 images are on Docker Hub."**
 
-**Check it worked:** go to https://hub.docker.com and log in. You should see four
+**Check it worked:** go to https://hub.docker.com and log in. You should see six
 new repositories: `medimatrx-ingest`, `medimatrx-price`, `medimatrx-optimizer`,
 `medimatrx-gateway`.
 
@@ -239,7 +239,7 @@ Docker Desktop is not running. Open it from the Start menu and wait for
 
 Kubernetes cannot download your images. Two usual causes:
 
-1. Step 3 did not finish. Check https://hub.docker.com for your four repositories.
+1. Step 3 did not finish. Check https://hub.docker.com for your six repositories.
 2. Your Docker Hub repositories are **private**. Open each one on Docker Hub →
    Settings → make it **Public**.
 

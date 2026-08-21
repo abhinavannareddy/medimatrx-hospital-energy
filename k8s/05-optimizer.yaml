@@ -64,7 +64,7 @@ spec:
                 topologyKey: kubernetes.io/hostname
       containers:
         - name: optimizer
-          image: abhinavannareddy/medimatrx-optimizer:1.0.0
+          image: abhinavannareddy/medimatrx-optimizer:1.2.0
           imagePullPolicy: IfNotPresent
           ports:
             - name: http

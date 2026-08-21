@@ -66,7 +66,7 @@ policy.
 - *"programmatically connect to and use a REST API"* → the **price service**
   calling `elprisetjustnu.se` with `httpx`, and the **optimizer** calling ingest
   and price.
-- *"program a microservice that provides a REST API"* → all four services
+- *"program a microservice that provides a REST API"* → all six services
   provide one.
 
 ---
@@ -110,7 +110,7 @@ policy.
 
 ## Part 2: Architecture design decisions
 
-**"Why four microservices and not one application?"**
+**"Why six microservices and not one application?"**
 
 > Because the three workloads scale with completely different things. Ingest
 > scales with the number of meters. The optimizer scales with the number of sites
@@ -193,7 +193,7 @@ policy.
 **"What's the risk of this architecture to the business?"**
 
 > Operational complexity is a real risk for a small company. Thirty Kubernetes
-> objects and four images need a build pipeline and someone on call. If MediMatrx
+> objects and six images need a build pipeline and someone on call. If MediMatrx
 > were a startup with two engineers, I'd probably start as a modular monolith and
 > split out the optimizer first, when the scaling pressure actually appeared. The
 > architecture I've built is the *destination*, and I'd be honest with an
@@ -281,8 +281,59 @@ Use the flow from Part 0, question 1. Then add:
 > replica keeps its own cache. More pods would mean more calls to somebody else's
 > free public API. That's a design decision, not a limitation.
 >
-> I demonstrate it by scaling only the optimizer and showing the other three
+> I demonstrate it by scaling only the optimizer and showing the other five
 > deployments unchanged.
+
+**"Walk me through your optimisation algorithm."** *(The strongest question you
+can be asked, and the one with the best answer. Do not rush it.)*
+
+> The naive version is one line: move deferrable load into the cheapest hours,
+> cheapest first. I built that first and it was wrong, in a way that costs the
+> hospital money rather than just leaving some on the table.
+>
+> The reason is that a hospital pays two electricity bills. There's energy, in
+> kWh, priced hour by hour. And there's the grid demand charge, which is billed
+> on the single highest hour of the month, around 68 kronor per kW. If every
+> zone independently picks the cheapest hour, they all pick the *same* hour, and
+> together they build a new peak taller than the one I just removed. The energy
+> bill goes down and the demand charge goes up by more.
+>
+> So placement happens in two passes. First every zone gives up its movable
+> load, and nothing is placed. Then, because I now know the whole site's profile
+> after removal, I solve for the lowest site-wide ceiling whose spare capacity
+> still fits everything I picked up, and fill to that ceiling and no higher.
+> That's water filling, the standard formulation of peak minimisation. Binary
+> search, sixty iterations.
+>
+> The split between the passes is the crux: where load lands is a decision about
+> the whole site, and you physically cannot make it one zone at a time.
+>
+> And there's a nice guarantee. I let placement consider all twenty-four hours,
+> preferring cheap ones. Today's actual profile is itself a valid arrangement
+> that fits under today's peak, so a ceiling equal to the baseline peak is always
+> feasible, which means the search can never return anything higher.
+> **The optimizer provably cannot raise the site peak.** That's a property of
+> the method, not a case I test for.
+
+**"What if your plan would cost the hospital money?"**
+
+> It can, on one specific kind of day, and the system says so rather than hiding
+> it.
+>
+> If cheap power arrives exactly when the site is busiest, say a windy weekday
+> afternoon, then flattening the peak means moving load *out* of the cheapest
+> hours, and the energy bill rises by more than the demand charge falls. The
+> arithmetic is right and the plan is still a bad idea.
+>
+> So the optimizer computes the net of both bills, and if it's negative the
+> dashboard leads with "change nothing today" and shows the loss in red. The
+> individual moves are still listed, for transparency, but they're marked as not
+> to be applied.
+>
+> I also report the peak change as a signed number. An earlier version clamped
+> it at zero, so a plan that raised the peak displayed as "0 kW saved". That's
+> the more dangerous bug of the two, because it looks calm. A regression must
+> never round down to reassurance.
 
 **"How is the storage persistent?"**
 
@@ -391,7 +442,7 @@ Give four, in order of importance:
 
 **"What would you do differently?"**: Have a real answer ready. Mine: start as a
 modular monolith and split out the optimizer first, when scaling pressure actually
-appears; add OpenTelemetry tracing from day one, because debugging four services
+appears; add OpenTelemetry tracing from day one, because debugging six services
 without it is genuinely painful; and put a message queue between the meters and
 ingest.
 

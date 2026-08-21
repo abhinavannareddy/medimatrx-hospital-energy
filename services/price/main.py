@@ -105,7 +105,7 @@ def modelled_curve(area: str) -> list[float]:
 # ==========================================================================
 #  Upstream fetch
 # ==========================================================================
-async def fetch_upstream(area: str) -> dict:
+async def fetch_upstream(area: str, day_offset: int = 0) -> dict:
     """
     Call the public elprisetjustnu.se REST API and reduce whatever it gives
     us to exactly 24 hourly averages.
@@ -115,8 +115,12 @@ async def fetch_upstream(area: str) -> dict:
     averaging every record into the hour bucket it belongs to. Writing the
     client this way means an upstream format change does not break us.
     """
-    today = datetime.now(timezone(timedelta(hours=2)))
-    url = f"{UPSTREAM_BASE}/{today.year}/{today.month:02d}-{today.day:02d}_{area}.json"
+    # day_offset 0 = today, 1 = tomorrow. Nordic day-ahead prices for tomorrow
+    # are published in the early afternoon, so a request for tomorrow before
+    # then legitimately returns nothing. That is not an error, it is the
+    # market not having cleared yet, and the caller is told so.
+    target = datetime.now(timezone(timedelta(hours=2))) + timedelta(days=day_offset)
+    url = f"{UPSTREAM_BASE}/{target.year}/{target.month:02d}-{target.day:02d}_{area}.json"
 
     _stats["upstream_calls"] += 1
     async with httpx.AsyncClient(timeout=UPSTREAM_TIMEOUT) as client:
@@ -145,7 +149,7 @@ async def fetch_upstream(area: str) -> dict:
 
     return {
         "area": area,
-        "date": today.strftime("%Y-%m-%d"),
+        "date": target.strftime("%Y-%m-%d"),
         "currency": "SEK/kWh",
         "source": "elprisetjustnu.se",
         "resolution_records": len(raw),
@@ -176,10 +180,11 @@ def build_payload(area: str, hourly: list[float], source: str, stale: bool = Fal
     }
 
 
-async def get_prices(area: str) -> dict:
+async def get_prices(area: str, day_offset: int = 0) -> dict:
     """Cache-aside: look in the cache first, only then go to the network."""
     now = time.time()
-    cached = _cache.get(area)
+    key = f"{area}:{day_offset}"
+    cached = _cache.get(key)
 
     if cached and (now - cached[0]) < CACHE_TTL_SECONDS:
         _stats["cache_hits"] += 1
@@ -189,17 +194,21 @@ async def get_prices(area: str) -> dict:
         return payload
 
     try:
-        upstream = await fetch_upstream(area)
+        upstream = await fetch_upstream(area, day_offset)
         payload = build_payload(area, upstream["hourly"], upstream["source"])
         payload["resolution_records"] = upstream["resolution_records"]
         payload["cached"] = False
-        _cache[area] = (now, payload)
-        log.info(f"fetched live prices for {area}: {upstream['resolution_records']} records -> 24 hours")
+        _cache[key] = (now, payload)
+        payload["day"] = "tomorrow" if day_offset else "today"
+        log.info(f"fetched live prices for {area} "
+                 f"({'tomorrow' if day_offset else 'today'}): "
+                 f"{upstream['resolution_records']} records -> 24 hours")
         return payload
 
     except Exception as exc:  # noqa: BLE001 - we deliberately catch everything
         _stats["upstream_failures"] += 1
-        log.warning(f"upstream price API failed for {area}: {exc}")
+        log.warning(f"upstream price API failed for {area} "
+                    f"(offset {day_offset}): {exc}")
 
         # Degrade gracefully, best option first.
         if cached:
@@ -240,13 +249,19 @@ async def readyz():
 #  REST API
 # ==========================================================================
 @app.get("/api/prices")
-async def prices(area: str = Query(default=DEFAULT_AREA, pattern="^SE[1-4]$")):
+async def prices(
+    area: str = Query(default=DEFAULT_AREA, pattern="^SE[1-4]$"),
+    day: str = Query(default="today", pattern="^(today|tomorrow)$"),
+):
     """
-    Today's electricity price, one number per hour, 00:00 to 23:00.
+    Electricity price, one number per hour, 00:00 to 23:00.
 
-    Example:  GET /api/prices?area=SE4
+    GET /api/prices?area=SE4
+    GET /api/prices?area=SE4&day=tomorrow    <- day-ahead, once published
     """
-    return await get_prices(area)
+    payload = await get_prices(area, 1 if day == "tomorrow" else 0)
+    payload.setdefault("day", day)
+    return payload
 
 
 @app.get("/api/prices/cheapest-window")

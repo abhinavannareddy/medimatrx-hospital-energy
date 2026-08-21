@@ -78,7 +78,7 @@ spec:
         - name: ingest
           # >>> REPLACE "DOCKERHUB_USER" WITH YOUR OWN DOCKER HUB USERNAME <<<
           # The script scripts/set-dockerhub-user.ps1 does this for you.
-          image: abhinavannareddy/medimatrx-ingest:1.0.0
+          image: abhinavannareddy/medimatrx-ingest:1.2.0
           imagePullPolicy: IfNotPresent
 
           ports:

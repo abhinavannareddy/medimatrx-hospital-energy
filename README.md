@@ -6,7 +6,9 @@ load**.
 
 Built for the Cloud Computing assignment at Blekinge Institute of Technology.
 Uses **live Swedish electricity spot prices** from the public
-[elprisetjustnu.se](https://www.elprisetjustnu.se) API.
+[elprisetjustnu.se](https://www.elprisetjustnu.se) API and **live weather
+forecasts** from [Open-Meteo](https://open-meteo.com). Neither needs an API key,
+so the whole system runs with no credentials of any kind.
 
 ---
 
@@ -14,7 +16,7 @@ Uses **live Swedish electricity spot prices** from the public
 
 Swedish electricity is priced hourly on a day-ahead market, and the cheapest hour
 of the day typically costs about a third of the most expensive hour. Hospitals
-run 24/7 and spend 8-15 Million SEK a year on power, but only part of that load is
+run 24/7 and spend 8-15 MSEK a year on power, but only part of that load is
 negotiable.
 
 MediMatrx separates the two:
@@ -41,10 +43,21 @@ Browser ──► API Gateway (Node.js) ──┬──► Ingest Service (Node.
                                     ├──► Price Service (Python) ──► elprisetjustnu.se
                                     │         caches 15 min            (public API)
                                     │
-                                    └──► Optimizer Service (Python)
-                                              stateless brain
-                                              calls ingest + price
+                                    ├──► Optimizer Service (Python)
+                                    │         stateless brain
+                                    │         calls ingest + price
+                                    │
+                                    ├──► Assistant Service (Python)
+                                    │         natural language, read-only
+                                    │         calls ingest + price + optimizer
+                                    │
+                                    └──► Forecast Service (Python) ──► Open-Meteo
+                                              predicts tomorrow's load    (public API)
+                                              from the weather, then asks
+                                              the optimizer to plan it
 ```
+
+![MediMatrx architecture](docs/architecture-diagram.svg)
 
 | Service | Language | Replicas | Owns state | Role |
 |---|---|---|---|---|
@@ -52,9 +65,11 @@ Browser ──► API Gateway (Node.js) ──┬──► Ingest Service (Node.
 | **ingest** | Node.js / Express | 2-12 | **MongoDB** | Receives and stores meter readings; serves 24-hour aggregates |
 | **price** | Python / FastAPI | 2-4 | cache only | Fetches live spot prices; caches; degrades gracefully when upstream fails |
 | **optimizer** | Python / FastAPI | 2-15 | no | Computes the load-shifting plan, savings and anomalies |
+| **assistant** | Python / FastAPI | 2-10 | no | Answers questions in plain English, grounded strictly in the other services' APIs |
+| **forecast** | Python / FastAPI | 2-4 | no | Predicts tomorrow's load from the weather forecast, then asks the optimizer to plan it |
 | **mongodb** | MongoDB 7.0 | 1 | **yes** | Persistent storage on a PersistentVolumeClaim |
 
-**Patterns used:** API Gateway · Database per Service · Backend for Frontend ·
+**Patterns used:** API Gateway · Grounded Assistant (tool-use over own APIs) · Database per Service · Backend for Frontend ·
 Service Discovery · Cache-Aside · Graceful Degradation · Retry with Backoff ·
 Health/Readiness Separation · Bulkhead & Fail-Fast · Stateless Compute ·
 Externalised Configuration.
@@ -70,10 +85,10 @@ Full design rationale, benefits, challenges and the security analysis are in
 account.
 
 ```powershell
-# 1. Build the four images and push them to your Docker Hub account
+# 1. Build the six images and push them to your Docker Hub account
 powershell -ExecutionPolicy Bypass -File .\scripts\1-build-and-push.ps1
 
-# 2. Deploy all 30 Kubernetes objects and load a demo day
+# 2. Deploy all 40 Kubernetes objects and load a demo day
 powershell -ExecutionPolicy Bypass -File .\scripts\2-deploy.ps1
 ```
 
@@ -115,7 +130,9 @@ medimatrx/
 │   ├── gateway/        Node.js  - API gateway + the dashboard (public/index.html)
 │   ├── ingest/         Node.js  - meter data, MongoDB owner
 │   ├── price/          Python   - live electricity prices
-│   └── optimizer/      Python   - the optimisation brain
+│   ├── optimizer/      Python   - the optimisation brain
+│   ├── assistant/      Python   - grounded natural-language assistant
+│   └── forecast/       Python   - weather-driven plan for tomorrow
 ├── k8s/
 │   ├── 00-namespace.yaml
 │   ├── 01-config-and-secrets.yaml
@@ -124,14 +141,19 @@ medimatrx/
 │   ├── 04-price.yaml
 │   ├── 05-optimizer.yaml
 │   ├── 06-gateway.yaml            NodePort (+ commented Ingress)
-│   ├── 07-autoscaling.yaml        4 × HPA, 3 × PodDisruptionBudget
-│   └── 08-network-policy.yaml     default-deny + 9 explicit allows
+│   ├── 07-autoscaling.yaml        6 × HPA, 5 × PodDisruptionBudget
+│   ├── 08-network-policy.yaml     default-deny + 12 explicit allows
+│   ├── 09-assistant.yaml          the assistant service
+│   └── 10-forecast.yaml           the forecast service
 ├── scripts/            numbered PowerShell scripts for Windows
 ├── docs/
 │   ├── 01-REPORT.md    the assignment report
 │   ├── 02-RUN-GUIDE.md step-by-step instructions
 │   ├── 03-VIDEO-SCRIPT.md
-│   └── 04-QA-PREP.md   likely examiner questions and answers
+│   ├── 04-QA-PREP.md   likely examiner questions and answers
+│   ├── 05-PRODUCT-ROADMAP.md  from demo to product
+│   ├── 06-DEPLOY-STEPS.md     the short deploy checklist
+│   └── architecture-diagram.svg
 └── docker-compose.yml  run everything without Kubernetes
 ```
 
@@ -155,6 +177,7 @@ POST /api/simulate                   load a realistic demo day (?faults=0 to ski
 
 ```
 GET  /api/prices?area=SE4            today's 24 hourly prices, live
+GET  /api/prices?area=SE4&day=tomorrow   tomorrow's day-ahead prices
 GET  /api/prices/cheapest-window?hours=3
 GET  /api/stats                      cache and upstream counters
 ```
@@ -163,8 +186,39 @@ GET  /api/stats                      cache and upstream counters
 
 ```
 GET  /api/optimize?area=SE4          the plan, the savings, the recommendations
+GET  /api/optimize?flex=laundry:0.9  the same, as a what-if scenario
+POST /api/optimize/scenario          optimise a supplied day, not today's
 GET  /api/anomalies                  equipment faults detected
 ```
+
+### Assistant (assistant service)
+
+```
+POST /api/chat                       {"message": "why move the laundry?"}
+GET  /api/chat/suggestions           starter questions
+```
+
+The assistant is **read-only** and answers only from the APIs above. It runs a
+deterministic intent engine by default, so it needs no LLM key, no internet
+and no per-question cost, and it cannot invent a number. An LLM is optional
+and only rephrases an answer that has already been computed from real data;
+if that call fails the deterministic answer is returned instead.
+
+### Forecast (forecast service)
+
+```
+GET  /api/forecast/weather           today's and tomorrow's hourly temperature
+GET  /api/forecast/plan?area=SE4     tomorrow's predicted load and its plan
+```
+
+Every plan carries a `confidence` rating and a list of `caveats`. Day-ahead
+prices genuinely do not exist until the market publishes them in the early
+afternoon, so before then the service says so rather than presenting a modelled
+number as if it were a measured one.
+
+The forecast service holds **no copy of the optimisation algorithm**. It posts
+the day it predicted to the optimizer's scenario endpoint, so today's report and
+tomorrow's plan come out of one implementation and cannot drift apart.
 
 ### Operational
 
@@ -180,11 +234,11 @@ GET  /api/topology                   which pod is serving each service
 
 | Requirement | Where it is met |
 |---|---|
-| Deployable using Kubernetes | `k8s/`, 30 objects across 9 files |
-| At least two types of microservice + a database | Four services in two languages + MongoDB |
+| Deployable using Kubernetes | `k8s/`, 35 objects across 10 files |
+| At least two types of microservice + a database | Five services in two languages + MongoDB |
 | Each microservice implements a REST API | See the API section above |
 | Accessible from outside Kubernetes | NodePort 30080 in a web browser |
-| All microservices independently horizontally scalable | 4 separate HPAs in `07-autoscaling.yaml` |
+| All microservices independently horizontally scalable | 5 separate HPAs in `07-autoscaling.yaml` |
 | Images pushed to Docker Hub | `scripts/1-build-and-push.ps1` |
 | Database as a separate microservice | MongoDB StatefulSet |
 | Storage persistent across restarts | `volumeClaimTemplates`, proven by `scripts/4-demo-persistence.ps1` |

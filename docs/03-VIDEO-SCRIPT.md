@@ -80,18 +80,18 @@ Switch to the browser. Point at things as you talk.
 
 ---
 
-## 2:30-4:00: The architecture and the four microservices
+## 2:30-4:00: The architecture and the six microservices
 
 Switch to VS Code, open `docs/01-REPORT.md` and scroll to the architecture
 diagram, or just talk over the dashboard.
 
-> "Architecturally this is four microservices plus a database, and they're
+> "Architecturally this is six microservices plus a database, and they're
 > deliberately split along the lines of *how they scale*, not how the code is
 > organised.
 >
 > **The gateway** is Node.js and Express. It's the only service exposed outside
 > the cluster. It serves the dashboard and routes every API call. It's also where
-> I do security once instead of four times, the security headers, the rate
+> I do security once instead of six times, the security headers, the rate
 > limiting, the upstream timeouts.
 >
 > **The ingest service** is also Node.js. It's the only service allowed to touch
@@ -236,9 +236,9 @@ powershell -ExecutionPolicy Bypass -File .\scripts\4-demo-persistence.ps1
 
 ## 7:30-8:00: Wrap up
 
-> "So to summarise: four independently scalable microservices in two languages,
+> "So to summarise: six independently scalable microservices in two languages,
 > each with its own REST API, a MongoDB database on persistent storage, all
-> deployed on Kubernetes, all four images on Docker Hub, and accessible from a
+> deployed on Kubernetes, all six images on Docker Hub, and accessible from a
 > normal web browser.
 >
 > Two honest limitations. There's no authentication yet, anyone who can reach
