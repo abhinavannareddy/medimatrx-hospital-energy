@@ -1,0 +1,596 @@
+<!DOCTYPE html>
+<html lang="en" data-palette="#d95926,#3987e5,#199e70">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MediWatt — Hospital Energy Optimisation</title>
+<!-- Inline favicon so the page makes zero external requests. -->
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%233987e5'/%3E%3Cpath d='M17.5 4 8 18h6l-1.5 10L23 14h-6z' fill='%23fff'/%3E%3C/svg%3E">
+<style>
+  /* =====================================================================
+     MediWatt dashboard styling.
+     Everything is in this one file on purpose: the page must work with no
+     internet access and no external libraries, because it is served from
+     inside a Kubernetes cluster that may be locked down.
+     ===================================================================== */
+  :root {
+    color-scheme: dark;
+    --plane:        #0d0d0d;
+    --surface:      #1a1a19;
+    --surface-2:    #212120;
+    --ink:          #ffffff;
+    --ink-2:        #c3c2b7;
+    --muted:        #898781;
+    --grid:         #2c2c2a;
+    --axis:         #383835;
+    --border:       rgba(255,255,255,0.10);
+
+    --baseline:     #d95926;   /* series 1 — how the hospital runs today   */
+    --optimised:    #3987e5;   /* series 2 — the MediWatt plan             */
+    --price:        #199e70;   /* price series, own panel                  */
+
+    --good:         #0ca30c;
+    --warning:      #fab219;
+    --serious:      #ec835a;
+    --critical:     #d03b3b;
+
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--plane);
+    color: var(--ink);
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .wrap { max-width: 1180px; margin: 0 auto; padding: 24px 20px 72px; }
+
+  /* ---------- header ---------- */
+  header {
+    display: flex; flex-wrap: wrap; gap: 16px;
+    align-items: center; justify-content: space-between;
+    padding-bottom: 20px; border-bottom: 1px solid var(--border); margin-bottom: 24px;
+  }
+  .brand { display: flex; align-items: center; gap: 14px; }
+  .mark {
+    width: 42px; height: 42px; border-radius: 11px; flex: none;
+    background: linear-gradient(135deg, var(--optimised), var(--price));
+    display: grid; place-items: center; font-weight: 700; font-size: 19px; color: #fff;
+  }
+  h1 { font-size: 21px; margin: 0; letter-spacing: -0.01em; }
+  .sub { font-size: 13px; color: var(--muted); margin-top: 3px; }
+
+  .controls { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  select, button {
+    font: inherit; font-size: 13px;
+    background: var(--surface-2); color: var(--ink);
+    border: 1px solid var(--border); border-radius: 8px;
+    padding: 8px 13px; cursor: pointer;
+  }
+  button:hover, select:hover { border-color: rgba(255,255,255,0.25); }
+  button.primary { background: var(--optimised); border-color: var(--optimised); font-weight: 600; }
+  button.primary:hover { filter: brightness(1.12); }
+  button:disabled { opacity: 0.45; cursor: not-allowed; }
+
+  /* ---------- status strip ---------- */
+  .status {
+    display: flex; gap: 18px; flex-wrap: wrap; align-items: center;
+    font-size: 12.5px; color: var(--muted); margin-bottom: 22px;
+  }
+  .dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; margin-right: 7px; }
+  .badge {
+    display: inline-flex; align-items: center;
+    border: 1px solid var(--border); border-radius: 999px; padding: 4px 11px;
+    background: var(--surface);
+  }
+
+  /* ---------- stat tiles ---------- */
+  .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(196px, 1fr)); gap: 12px; margin-bottom: 24px; }
+  .tile {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 13px; padding: 17px 18px;
+  }
+  .tile .label { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; }
+  .tile .value { font-size: 29px; font-weight: 650; margin: 9px 0 3px; letter-spacing: -0.02em; }
+  .tile .note { font-size: 12.5px; color: var(--ink-2); }
+  .tile.hero { background: linear-gradient(150deg, #16324f, var(--surface) 62%); border-color: rgba(57,135,229,0.4); }
+  .tile.hero .value { font-size: 37px; }
+
+  /* ---------- cards ---------- */
+  .card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 13px; padding: 19px 20px; margin-bottom: 20px;
+  }
+  .card h2 { font-size: 15px; margin: 0 0 4px; font-weight: 620; }
+  .card .desc { font-size: 12.5px; color: var(--muted); margin: 0 0 16px; }
+
+  .legend { display: flex; gap: 18px; flex-wrap: wrap; font-size: 12.5px; color: var(--ink-2); margin-bottom: 6px; }
+  .legend span { display: inline-flex; align-items: center; gap: 7px; }
+  .swatch { width: 11px; height: 11px; border-radius: 3px; display: inline-block; }
+  .swatch.line { height: 3px; border-radius: 2px; width: 15px; }
+
+  svg { width: 100%; height: auto; display: block; overflow: visible; }
+  .chart-scroll { overflow-x: auto; }
+
+  /* ---------- tooltip ---------- */
+  #tip {
+    position: fixed; pointer-events: none; opacity: 0; transition: opacity .1s;
+    background: #000; border: 1px solid var(--border); border-radius: 9px;
+    padding: 10px 12px; font-size: 12.5px; line-height: 1.55; z-index: 50;
+    box-shadow: 0 8px 26px rgba(0,0,0,.6); min-width: 168px;
+  }
+  #tip .th { font-weight: 650; margin-bottom: 6px; font-size: 13px; }
+  #tip .row { display: flex; justify-content: space-between; gap: 18px; }
+  #tip .row span:last-child { font-variant-numeric: tabular-nums; }
+
+  /* ---------- lists ---------- */
+  .cols { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+  @media (max-width: 860px) { .cols { grid-template-columns: 1fr; } }
+
+  ul.items { list-style: none; margin: 0; padding: 0; }
+  ul.items li {
+    padding: 13px 0; border-top: 1px solid var(--border);
+    display: flex; gap: 12px; align-items: flex-start; font-size: 13.5px; line-height: 1.55;
+  }
+  ul.items li:first-child { border-top: none; }
+  .pill {
+    flex: none; font-size: 10.5px; font-weight: 700; text-transform: uppercase;
+    letter-spacing: 0.05em; padding: 3px 8px; border-radius: 6px; margin-top: 2px;
+  }
+  .pill.high     { background: rgba(12,163,12,.16);  color: var(--good);     border: 1px solid rgba(12,163,12,.4); }
+  .pill.medium   { background: rgba(250,178,25,.14); color: var(--warning);  border: 1px solid rgba(250,178,25,.4); }
+  .pill.low      { background: rgba(137,135,129,.16);color: var(--muted);    border: 1px solid var(--border); }
+  .pill.policy   { background: rgba(57,135,229,.14); color: var(--optimised);border: 1px solid rgba(57,135,229,.4); }
+  .pill.serious  { background: rgba(236,131,90,.14); color: var(--serious);  border: 1px solid rgba(236,131,90,.4); }
+  .pill.critical { background: rgba(208,59,59,.16);  color: var(--critical); border: 1px solid rgba(208,59,59,.45); }
+
+  /* ---------- tables ---------- */
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th, td { text-align: left; padding: 9px 10px; border-bottom: 1px solid var(--border); }
+  th { color: var(--muted); font-weight: 600; font-size: 11.5px; text-transform: uppercase; letter-spacing: 0.05em; }
+  td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+  tbody tr:hover { background: var(--surface-2); }
+
+  .tag { font-size: 11px; padding: 2px 7px; border-radius: 5px; border: 1px solid var(--border); color: var(--ink-2); }
+  .tag.clinical  { color: var(--optimised); border-color: rgba(57,135,229,.4); }
+  .tag.shiftable { color: var(--price);     border-color: rgba(25,158,112,.45); }
+
+  /* ---------- infrastructure panel ---------- */
+  .pods { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 10px; }
+  .pod {
+    border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px;
+    background: var(--surface-2); font-size: 12.5px;
+  }
+  .pod .name { color: var(--muted); font-size: 11.5px; text-transform: uppercase; letter-spacing: .06em; }
+  .pod .host { font-family: ui-monospace, "Cascadia Mono", Consolas, monospace; margin-top: 6px; word-break: break-all; font-size: 12px; }
+
+  .toggle { background: none; border: none; color: var(--optimised); padding: 0; font-size: 12.5px; text-decoration: underline; }
+  .hidden { display: none; }
+  .err { color: var(--critical); font-size: 13.5px; }
+  footer { color: var(--muted); font-size: 12px; text-align: center; margin-top: 30px; line-height: 1.7; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <div class="brand">
+      <div class="mark">M</div>
+      <div>
+        <h1>MediWatt</h1>
+        <div class="sub">Energy optimisation platform · Blekinge Regional Hospital (demo site)</div>
+      </div>
+    </div>
+    <div class="controls">
+      <select id="area" title="Swedish electricity bidding area">
+        <option value="SE1">SE1 — Luleå</option>
+        <option value="SE2">SE2 — Sundsvall</option>
+        <option value="SE3">SE3 — Stockholm</option>
+        <option value="SE4" selected>SE4 — Malmö</option>
+      </select>
+      <button id="seed" title="Generate 24 hours of meter readings in the database">Load demo day</button>
+      <button id="refresh" class="primary">Refresh</button>
+    </div>
+  </header>
+
+  <div class="status">
+    <span class="badge"><span class="dot" id="live-dot" style="background:var(--muted)"></span><span id="live-text">connecting…</span></span>
+    <span id="price-source">—</span>
+    <span id="updated">—</span>
+  </div>
+
+  <div id="error" class="card err hidden"></div>
+
+  <!-- ============ KPI TILES ============ -->
+  <div class="tiles" id="tiles"></div>
+
+  <!-- ============ CHARTS ============ -->
+  <div class="card">
+    <h2>Site load, today vs the MediWatt plan</h2>
+    <p class="desc">
+      Top panel: total hospital electricity use in each hour. Bottom panel: what a kilowatt-hour
+      costs in that same hour. The plan moves deferrable work out of the expensive hours and into
+      the cheap ones. Clinical zones are never moved.
+    </p>
+    <div class="legend">
+      <span><i class="swatch" style="background:var(--baseline)"></i>Today (as operated)</span>
+      <span><i class="swatch" style="background:var(--optimised)"></i>MediWatt plan</span>
+      <span><i class="swatch line" style="background:var(--price)"></i>Electricity price</span>
+    </div>
+    <div class="chart-scroll"><svg id="chart" viewBox="0 0 980 430" role="img"
+      aria-label="Hourly hospital electricity consumption before and after optimisation, with the hourly electricity price below."></svg></div>
+    <button class="toggle" id="table-toggle" style="margin-top:12px">Show the numbers as a table</button>
+    <div id="table-view" class="hidden" style="margin-top:14px; max-height:340px; overflow:auto"></div>
+  </div>
+
+  <!-- ============ RECOMMENDATIONS + ANOMALIES ============ -->
+  <div class="cols">
+    <div class="card">
+      <h2>Recommended actions</h2>
+      <p class="desc">Generated by the optimizer service, ranked by money saved.</p>
+      <ul class="items" id="recs"></ul>
+    </div>
+    <div class="card">
+      <h2>Maintenance early warnings</h2>
+      <p class="desc">Hours where a zone drew far more or far less power than its own normal pattern.</p>
+      <ul class="items" id="anomalies"></ul>
+    </div>
+  </div>
+
+  <!-- ============ ZONES ============ -->
+  <div class="card">
+    <h2>Metered zones</h2>
+    <p class="desc">Every zone has its own electricity meter feeding the ingest service.</p>
+    <div style="overflow-x:auto"><table id="zones"></table></div>
+  </div>
+
+  <!-- ============ INFRASTRUCTURE ============ -->
+  <div class="card">
+    <h2>Live infrastructure</h2>
+    <p class="desc">
+      Which Kubernetes pod answered this page load. Scale a deployment up with
+      <code>kubectl scale</code> and press Refresh — the names change as the load balancer
+      spreads requests across the replicas.
+    </p>
+    <div class="pods" id="pods"></div>
+  </div>
+
+  <footer>
+    MediWatt · microservice demonstrator for DV2626 Cloud Computing, Blekinge Institute of Technology<br>
+    Electricity prices from the public elprisetjustnu.se API. Meter data is simulated for the demo.
+  </footer>
+</div>
+
+<div id="tip"></div>
+
+<script>
+/* =======================================================================
+   All the browser-side logic. Plain JavaScript, zero dependencies.
+   The browser only ever talks to the gateway (same origin), never
+   directly to the internal microservices.
+   ======================================================================= */
+
+const $ = (id) => document.getElementById(id);
+const nf0 = new Intl.NumberFormat('sv-SE', { maximumFractionDigits: 0 });
+const nf1 = new Intl.NumberFormat('sv-SE', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+const nf2 = new Intl.NumberFormat('sv-SE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+let state = { optimize: null, zones: null };
+
+/* ---------------- data loading ---------------- */
+async function getJSON(url) {
+  const r = await fetch(url);
+  const body = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(body.error || body.hint || `HTTP ${r.status}`);
+  return body;
+}
+
+async function load() {
+  const area = $('area').value;
+  setLive('busy', 'loading…');
+  $('error').classList.add('hidden');
+  $('refresh').disabled = true;
+
+  try {
+    // These four calls are independent, so fire them all at once.
+    const [opt, anomalies, zones, topology] = await Promise.all([
+      getJSON(`/api/optimize?area=${area}`),
+      getJSON('/api/anomalies').catch(() => ({ anomalies: [] })),
+      getJSON('/api/zones').catch(() => ({ zones: [] })),
+      getJSON('/api/topology').catch(() => ({ services: [] }))
+    ]);
+
+    state.optimize = opt;
+    state.zones = zones.zones || [];
+
+    renderTiles(opt);
+    renderChart(opt);
+    renderTable(opt);
+    renderRecs(opt.recommendations || []);
+    renderAnomalies(anomalies.anomalies || []);
+    renderZones(state.zones, opt);
+    renderPods(topology, opt);
+
+    $('price-source').textContent = opt.priceStale
+      ? 'price feed: cached (upstream unreachable)'
+      : opt.priceSource === 'modelled-fallback'
+        ? 'price feed: modelled fallback (upstream unreachable)'
+        : 'price feed: live from elprisetjustnu.se';
+    $('updated').textContent = 'updated ' + new Date().toLocaleTimeString('sv-SE');
+    setLive('ok', 'all services healthy');
+
+  } catch (err) {
+    setLive('bad', 'degraded');
+    $('error').classList.remove('hidden');
+    $('error').innerHTML = `<strong>Could not load the optimisation.</strong><br>${escapeHtml(err.message)}
+      <br><br>If this says “no meter data yet”, press <em>Load demo day</em> to fill the database.`;
+  } finally {
+    $('refresh').disabled = false;
+  }
+}
+
+function setLive(kind, text) {
+  const colors = { ok: 'var(--good)', busy: 'var(--warning)', bad: 'var(--critical)' };
+  $('live-dot').style.background = colors[kind] || 'var(--muted)';
+  $('live-text').textContent = text;
+}
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, c =>
+    ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
+// Big money is easier to read as "1,39 Mkr" than as "1 390 220 kr".
+function compactSek(v) {
+  return v >= 1e6 ? nf2.format(v / 1e6) + ' Mkr' : nf0.format(v) + ' kr';
+}
+
+/* ---------------- KPI tiles ---------------- */
+function renderTiles(o) {
+  const s = o.savings;
+  const tiles = [
+    { hero: true, label: 'Annual saving', value: compactSek(s.annualTotalSek),
+      note: `${nf0.format(s.dailySek)} kr/day on energy + ${nf0.format(s.demandChargeMonthlySek)} kr/month on grid demand charges` },
+    { label: 'Energy cost cut', value: nf1.format(s.dailyPct) + ' %',
+      note: `${nf0.format(o.baseline.costSek)} kr → ${nf0.format(o.optimised.costSek)} kr today` },
+    { label: 'Peak demand cut', value: nf0.format(s.peakReductionKw) + ' kW',
+      note: `site peak ${nf0.format(o.baseline.peakKw)} → ${nf0.format(o.optimised.peakKw)} kW` },
+    { label: 'Load shifted', value: nf0.format(s.shiftedKwh) + ' kWh',
+      note: 'moved out of peak-price hours, clinical load untouched' },
+    { label: 'Carbon avoided', value: nf1.format(s.co2SavedTonnesPerYear) + ' t',
+      note: `CO₂ per year (${nf0.format(s.co2SavedKgPerDay)} kg/day)` }
+  ];
+  $('tiles').innerHTML = tiles.map(t => `
+    <div class="tile${t.hero ? ' hero' : ''}">
+      <div class="label">${t.label}</div>
+      <div class="value">${t.value}</div>
+      <div class="note">${t.note}</div>
+    </div>`).join('');
+}
+
+/* ---------------- the chart ---------------- */
+function renderChart(o) {
+  const base = o.baseline.hourlyKwh;
+  const opt = o.optimised.hourlyKwh;
+  const price = o.prices;
+
+  const W = 980, PAD_L = 62, PAD_R = 18;
+  const A_TOP = 16, A_H = 226;            // panel A: consumption
+  const B_TOP = 296, B_H = 96;            // panel B: price
+  const plotW = W - PAD_L - PAD_R;
+  const colW = plotW / 24;
+
+  const maxKwh = Math.max(...base, ...opt) * 1.08;
+  const maxPrice = Math.max(...price) * 1.15;
+  const minPrice = 0;
+
+  const yA = v => A_TOP + A_H - (v / maxKwh) * A_H;
+  const yB = v => B_TOP + B_H - ((v - minPrice) / (maxPrice - minPrice)) * B_H;
+  const xCol = h => PAD_L + h * colW;
+
+  let svg = '';
+
+  /* ---- panel A gridlines + ticks ---- */
+  const stepA = niceStep(maxKwh, 4);
+  for (let v = 0; v <= maxKwh; v += stepA) {
+    const y = yA(v);
+    svg += `<line x1="${PAD_L}" y1="${y.toFixed(1)}" x2="${W - PAD_R}" y2="${y.toFixed(1)}" stroke="var(--grid)" stroke-width="1"/>`;
+    svg += `<text x="${PAD_L - 10}" y="${(y + 4).toFixed(1)}" fill="var(--muted)" font-size="11" text-anchor="end" style="font-variant-numeric:tabular-nums">${nf0.format(v)}</text>`;
+  }
+  svg += `<text x="${PAD_L - 10}" y="${A_TOP - 4}" fill="var(--muted)" font-size="11" text-anchor="end">kWh</text>`;
+
+  /* ---- panel A bars: two thin bars per hour, 2px surface gap ---- */
+  const GAP = 2, PAIR_PAD = 5;
+  const barW = Math.max((colW - PAIR_PAD * 2 - GAP) / 2, 3);
+  for (let h = 0; h < 24; h++) {
+    const x0 = xCol(h) + PAIR_PAD;
+    svg += bar(x0, yA(base[h]), barW, A_TOP + A_H - yA(base[h]), 'var(--baseline)');
+    svg += bar(x0 + barW + GAP, yA(opt[h]), barW, A_TOP + A_H - yA(opt[h]), 'var(--optimised)');
+  }
+  svg += `<line x1="${PAD_L}" y1="${A_TOP + A_H}" x2="${W - PAD_R}" y2="${A_TOP + A_H}" stroke="var(--axis)" stroke-width="1"/>`;
+
+  /* ---- panel A: label the biggest single reduction ---- */
+  let bestH = 0, bestDrop = 0;
+  for (let h = 0; h < 24; h++) { const d = base[h] - opt[h]; if (d > bestDrop) { bestDrop = d; bestH = h; } }
+  if (bestDrop > 0) {
+    const lx = xCol(bestH) + colW / 2;
+    const ly = Math.min(yA(base[bestH]), yA(opt[bestH])) - 9;
+    const anchor = bestH > 19 ? 'end' : bestH < 4 ? 'start' : 'middle';
+    svg += `<text x="${lx.toFixed(1)}" y="${ly.toFixed(1)}" fill="var(--ink-2)" font-size="11.5" text-anchor="${anchor}">−${nf0.format(bestDrop)} kWh</text>`;
+  }
+
+  /* ---- panel B: price line ---- */
+  svg += `<text x="${PAD_L - 10}" y="${B_TOP - 4}" fill="var(--muted)" font-size="11" text-anchor="end">SEK/kWh</text>`;
+  const stepB = niceStep(maxPrice, 2);
+  for (let v = 0; v <= maxPrice; v += stepB) {
+    const y = yB(v);
+    svg += `<line x1="${PAD_L}" y1="${y.toFixed(1)}" x2="${W - PAD_R}" y2="${y.toFixed(1)}" stroke="var(--grid)" stroke-width="1"/>`;
+    svg += `<text x="${PAD_L - 10}" y="${(y + 4).toFixed(1)}" fill="var(--muted)" font-size="11" text-anchor="end" style="font-variant-numeric:tabular-nums">${nf2.format(v)}</text>`;
+  }
+  const pts = price.map((v, h) => `${(xCol(h) + colW / 2).toFixed(1)},${yB(v).toFixed(1)}`).join(' ');
+  svg += `<polyline points="${pts}" fill="none" stroke="var(--price)" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>`;
+
+  // Direct labels on the cheapest and dearest hour — never a label on every point.
+  const pMin = price.indexOf(Math.min(...price));
+  const pMax = price.indexOf(Math.max(...price));
+  // Both labels sit ABOVE their point: the cheapest hour is near the bottom
+  // of the panel, so a label below it would collide with the axis ticks.
+  for (const [h, text, dy] of [[pMin, 'cheapest ' + nf2.format(price[pMin]), -13], [pMax, 'peak ' + nf2.format(price[pMax]), -13]]) {
+    const cx = xCol(h) + colW / 2, cy = yB(price[h]);
+    svg += `<circle cx="${cx.toFixed(1)}" cy="${cy.toFixed(1)}" r="5" fill="var(--price)" stroke="var(--surface)" stroke-width="2"/>`;
+    const anchor = h > 18 ? 'end' : h < 5 ? 'start' : 'middle';
+    svg += `<text x="${cx.toFixed(1)}" y="${(cy + dy).toFixed(1)}" fill="var(--ink-2)" font-size="11.5" text-anchor="${anchor}">${text}</text>`;
+  }
+  svg += `<line x1="${PAD_L}" y1="${B_TOP + B_H}" x2="${W - PAD_R}" y2="${B_TOP + B_H}" stroke="var(--axis)" stroke-width="1"/>`;
+
+  /* ---- shared hour axis ---- */
+  for (let h = 0; h < 24; h += 2) {
+    svg += `<text x="${(xCol(h) + colW / 2).toFixed(1)}" y="${B_TOP + B_H + 18}" fill="var(--muted)" font-size="11" text-anchor="middle" style="font-variant-numeric:tabular-nums">${String(h).padStart(2, '0')}</text>`;
+  }
+  svg += `<text x="${W - PAD_R}" y="${B_TOP + B_H + 34}" fill="var(--muted)" font-size="11" text-anchor="end">hour of day (Europe/Stockholm)</text>`;
+
+  /* ---- hover layer: one invisible column per hour, crosshair + tooltip ---- */
+  svg += `<g id="hover-layer">`;
+  for (let h = 0; h < 24; h++) {
+    svg += `<rect class="hit" data-h="${h}" x="${xCol(h).toFixed(1)}" y="${A_TOP}" width="${colW.toFixed(2)}" height="${B_TOP + B_H - A_TOP}" fill="transparent"/>`;
+  }
+  svg += `<line id="crosshair" x1="0" y1="${A_TOP}" x2="0" y2="${B_TOP + B_H}" stroke="var(--ink-2)" stroke-width="1" opacity="0" pointer-events="none"/>`;
+  svg += `</g>`;
+
+  $('chart').innerHTML = svg;
+
+  /* attach the interaction */
+  const cross = document.getElementById('crosshair');
+  const tip = $('tip');
+  $('chart').querySelectorAll('.hit').forEach(rect => {
+    rect.addEventListener('mouseenter', () => {
+      const h = +rect.dataset.h;
+      const cx = xCol(h) + colW / 2;
+      cross.setAttribute('x1', cx); cross.setAttribute('x2', cx);
+      cross.setAttribute('opacity', '0.35');
+      const diff = base[h] - opt[h];
+      tip.innerHTML = `
+        <div class="th">${String(h).padStart(2, '0')}:00 – ${String((h + 1) % 24).padStart(2, '0')}:00</div>
+        <div class="row"><span style="color:var(--baseline)">Today</span><span>${nf0.format(base[h])} kWh</span></div>
+        <div class="row"><span style="color:var(--optimised)">Plan</span><span>${nf0.format(opt[h])} kWh</span></div>
+        <div class="row"><span style="color:var(--price)">Price</span><span>${nf2.format(price[h])} kr/kWh</span></div>
+        <div class="row" style="margin-top:5px;border-top:1px solid var(--border);padding-top:5px">
+          <span>Cost change</span><span>${diff >= 0 ? '−' : '+'}${nf0.format(Math.abs(diff * price[h]))} kr</span></div>`;
+      tip.style.opacity = '1';
+    });
+    rect.addEventListener('mousemove', (e) => {
+      tip.style.left = Math.min(e.clientX + 16, window.innerWidth - 210) + 'px';
+      tip.style.top = Math.min(e.clientY + 14, window.innerHeight - 130) + 'px';
+    });
+    rect.addEventListener('mouseleave', () => {
+      tip.style.opacity = '0';
+      cross.setAttribute('opacity', '0');
+    });
+  });
+}
+
+// A bar with 4px rounded ends at the top, square where it meets the baseline.
+function bar(x, y, w, h, fill) {
+  if (h <= 0.5) return '';
+  const r = Math.min(4, w / 2, h);
+  return `<path d="M${x.toFixed(1)},${(y + h).toFixed(1)} L${x.toFixed(1)},${(y + r).toFixed(1)}
+    Q${x.toFixed(1)},${y.toFixed(1)} ${(x + r).toFixed(1)},${y.toFixed(1)}
+    L${(x + w - r).toFixed(1)},${y.toFixed(1)} Q${(x + w).toFixed(1)},${y.toFixed(1)} ${(x + w).toFixed(1)},${(y + r).toFixed(1)}
+    L${(x + w).toFixed(1)},${(y + h).toFixed(1)} Z" fill="${fill}"/>`;
+}
+
+function niceStep(max, target) {
+  const raw = max / target;
+  const mag = Math.pow(10, Math.floor(Math.log10(raw)));
+  const norm = raw / mag;
+  const step = norm <= 1 ? 1 : norm <= 2 ? 2 : norm <= 5 ? 5 : 10;
+  return step * mag;
+}
+
+/* ---------------- table view (accessibility fallback) ---------------- */
+function renderTable(o) {
+  const rows = o.baseline.hourlyKwh.map((v, h) => `
+    <tr><td>${String(h).padStart(2, '0')}:00</td>
+      <td class="num">${nf0.format(v)}</td>
+      <td class="num">${nf0.format(o.optimised.hourlyKwh[h])}</td>
+      <td class="num">${nf2.format(o.prices[h])}</td></tr>`).join('');
+  $('table-view').innerHTML = `<table>
+    <thead><tr><th>Hour</th><th class="num">Today kWh</th><th class="num">Plan kWh</th><th class="num">SEK/kWh</th></tr></thead>
+    <tbody>${rows}</tbody></table>`;
+}
+
+/* ---------------- lists ---------------- */
+function renderRecs(recs) {
+  $('recs').innerHTML = recs.length ? recs.map(r => `
+    <li><span class="pill ${r.priority}">${r.priority}</span>
+        <span>${escapeHtml(r.text)}</span></li>`).join('')
+    : '<li>No recommendations yet.</li>';
+}
+
+function renderAnomalies(list) {
+  $('anomalies').innerHTML = list.length ? list.map(a => `
+    <li><span class="pill ${a.severity === 'high' ? 'critical' : 'serious'}">${a.severity}</span>
+        <span>${escapeHtml(a.text)}</span></li>`).join('')
+    : '<li>No unusual consumption detected in the last 24 hours.</li>';
+}
+
+function renderZones(zones, o) {
+  if (!zones.length) { $('zones').innerHTML = ''; return; }
+  const rows = zones.map(z => `
+    <tr>
+      <td>${escapeHtml(z.name)}</td>
+      <td>${z.critical ? '<span class="tag clinical">clinical — protected</span>'
+                       : z.shiftable ? '<span class="tag shiftable">deferrable</span>'
+                       : '<span class="tag">fixed</span>'}</td>
+      <td class="num">${nf0.format(z.baselineKw)} kW</td>
+      <td style="color:var(--ink-2)">${escapeHtml(z.description)}</td>
+    </tr>`).join('');
+  $('zones').innerHTML = `<thead><tr><th>Zone</th><th>Classification</th><th class="num">Rated load</th><th>What is in it</th></tr></thead><tbody>${rows}</tbody>`;
+}
+
+function renderPods(topology, o) {
+  const served = (o && o.servedBy) || {};
+  const cards = (topology.services || []).map(s => `
+    <div class="pod">
+      <div class="name"><span class="dot" style="background:${s.up ? 'var(--good)' : 'var(--critical)'}"></span>${s.service}</div>
+      <div class="host">${escapeHtml(s.pod || 'unreachable')}</div>
+    </div>`).join('');
+  const trace = `
+    <div class="pod" style="grid-column:1/-1;background:transparent;border-style:dashed">
+      <div class="name">request trace for this optimisation</div>
+      <div class="host">gateway → optimizer <b>${escapeHtml(served.optimizerPod || '?')}</b> → ingest <b>${escapeHtml(served.ingestPod || '?')}</b> + price <b>${escapeHtml(served.pricePod || '?')}</b> → MongoDB</div>
+    </div>`;
+  $('pods').innerHTML = cards + trace;
+}
+
+/* ---------------- wiring ---------------- */
+$('refresh').addEventListener('click', load);
+$('area').addEventListener('change', load);
+
+$('seed').addEventListener('click', async () => {
+  $('seed').disabled = true;
+  $('seed').textContent = 'Generating…';
+  try {
+    await fetch('/api/simulate', { method: 'POST' });
+    await load();
+  } finally {
+    $('seed').disabled = false;
+    $('seed').textContent = 'Load demo day';
+  }
+});
+
+$('table-toggle').addEventListener('click', () => {
+  const v = $('table-view');
+  v.classList.toggle('hidden');
+  $('table-toggle').textContent = v.classList.contains('hidden')
+    ? 'Show the numbers as a table' : 'Hide the table';
+});
+
+load();
+setInterval(load, 60000);   // keep the wall-board fresh
+</script>
+</body>
+</html>

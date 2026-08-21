@@ -1,0 +1,205 @@
+# ===========================================================================
+#  HORIZONTAL POD AUTOSCALERS
+#
+#  This file is the direct answer to the assignment requirement:
+#     "All microservices in the application must be horizontally scalable
+#      independently from each other."
+#
+#  Each service gets its OWN autoscaler with its OWN thresholds and its OWN
+#  minimum and maximum. The optimizer can grow to 12 pods while the gateway
+#  stays at 2, because they are separate objects watching separate metrics.
+#  Nothing is shared, nothing is coupled.
+#
+#  How an HPA works, in one sentence: every 15 seconds it looks at the
+#  average CPU (or memory) use across the pods of one deployment, compares
+#  it with the target below, and adds or removes pods to close the gap.
+#
+#  --------------------------------------------------------------------
+#  PREREQUISITE: metrics-server
+#  --------------------------------------------------------------------
+#  An HPA cannot see CPU usage unless metrics-server is installed. Docker
+#  Desktop and Minikube do NOT ship it by default. Without it the HPA shows
+#  "<unknown>/60%" and never scales.
+#
+#  Install it (one command, Docker Desktop):
+#     kubectl apply -f https://github.com/kubernetes-sigs/metrics-server/releases/latest/download/components.yaml
+#     kubectl patch deployment metrics-server -n kube-system --type=json ^
+#       -p "[{\"op\":\"add\",\"path\":\"/spec/template/spec/containers/0/args/-\",\"value\":\"--kubelet-insecure-tls\"}]"
+#
+#  The patch is needed because Docker Desktop's kubelet uses a self-signed
+#  certificate that metrics-server would otherwise reject.
+#
+#  Manual scaling always works, with or without metrics-server:
+#     kubectl scale deployment optimizer --replicas=6 -n mediwatt
+# ===========================================================================
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: gateway-hpa
+  namespace: mediwatt
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: gateway
+  minReplicas: 2
+  maxReplicas: 10
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 60
+  behavior:
+    scaleUp:
+      # React quickly when traffic arrives...
+      stabilizationWindowSeconds: 0
+      policies:
+        - type: Percent
+          value: 100          # allowed to double the pod count...
+          periodSeconds: 30    # ...every 30 seconds
+    scaleDown:
+      # ...but shrink slowly, so a brief lull does not cause pod thrashing.
+      stabilizationWindowSeconds: 180
+      policies:
+        - type: Pods
+          value: 1
+          periodSeconds: 60
+
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: ingest-hpa
+  namespace: mediwatt
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: ingest
+  minReplicas: 2
+  maxReplicas: 12
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 65
+    # Ingest also buffers documents in memory during a bulk write, so we
+    # watch memory as well as CPU. The HPA scales on whichever metric asks
+    # for the most pods.
+    - type: Resource
+      resource:
+        name: memory
+        target:
+          type: Utilization
+          averageUtilization: 75
+  behavior:
+    scaleDown:
+      stabilizationWindowSeconds: 300
+
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: price-hpa
+  namespace: mediwatt
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: price
+  minReplicas: 2
+  # The price service is capped low ON PURPOSE. Every extra replica keeps its
+  # own cache, so more pods means more calls to somebody else's public API.
+  # Scaling this one aggressively would be rude at best and rate-limited at
+  # worst. A real deployment would move the cache into shared Redis and then
+  # this ceiling could be raised.
+  maxReplicas: 4
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 70
+
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: optimizer-hpa
+  namespace: mediwatt
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: optimizer
+  minReplicas: 2
+  # The optimizer is the CPU-hungry one and is completely stateless, so it
+  # gets the highest ceiling in the system.
+  maxReplicas: 15
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 55
+  behavior:
+    scaleUp:
+      stabilizationWindowSeconds: 0
+      policies:
+        - type: Percent
+          value: 100
+          periodSeconds: 20
+
+---
+# ===========================================================================
+#  POD DISRUPTION BUDGETS
+#
+#  An HPA protects against too little capacity. A PDB protects against an
+#  ADMINISTRATOR accidentally removing capacity - for example when draining
+#  a node for maintenance or upgrading the cluster.
+#
+#  "minAvailable: 1" tells Kubernetes: you may evict my pods, but never so
+#  many that fewer than one is left serving. For a hospital system that is
+#  the difference between a maintenance window and an outage.
+# ===========================================================================
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: gateway-pdb
+  namespace: mediwatt
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: gateway
+
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: ingest-pdb
+  namespace: mediwatt
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: ingest
+
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: optimizer-pdb
+  namespace: mediwatt
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: optimizer

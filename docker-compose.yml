@@ -1,0 +1,91 @@
+# ===========================================================================
+#  Docker Compose - run the whole system on your laptop WITHOUT Kubernetes.
+#
+#  Why this file exists: Kubernetes is the assignment, but when something
+#  does not work you want to find out whether it is your CODE or your
+#  CLUSTER. Compose runs the same four containers plus MongoDB in about 30
+#  seconds, with no cluster involved. If it works here and not in Kubernetes,
+#  the problem is in the YAML. If it fails here too, the problem is the code.
+#
+#  Run it:      docker compose up --build
+#  Then open:   http://localhost:8080
+#  Stop it:     docker compose down
+#  Wipe data:   docker compose down -v
+# ===========================================================================
+
+services:
+
+  mongodb:
+    image: mongo:7.0
+    container_name: mediwatt-mongodb
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: mediwatt
+      MONGO_INITDB_ROOT_PASSWORD: devpassword
+    volumes:
+      # A named volume - the same idea as a PersistentVolumeClaim in
+      # Kubernetes. Data survives "docker compose down".
+      - mongo-data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+
+  ingest:
+    build: ./services/ingest
+    container_name: mediwatt-ingest
+    environment:
+      PORT: "8080"
+      POD_NAME: "ingest-local-1"
+      MONGO_HOST: "mongodb:27017"
+      MONGO_DB: "mediwatt"
+      MONGO_USER: "mediwatt"
+      MONGO_PASSWORD: "devpassword"
+      TZ: "Europe/Stockholm"
+    depends_on:
+      mongodb:
+        condition: service_healthy
+
+  price:
+    build: ./services/price
+    container_name: mediwatt-price
+    environment:
+      POD_NAME: "price-local-1"
+      PRICE_AREA: "SE4"
+      CACHE_TTL_SECONDS: "900"
+      TZ: "Europe/Stockholm"
+
+  optimizer:
+    build: ./services/optimizer
+    container_name: mediwatt-optimizer
+    environment:
+      POD_NAME: "optimizer-local-1"
+      INGEST_URL: "http://ingest:8080"
+      PRICE_URL: "http://price:8080"
+      TZ: "Europe/Stockholm"
+    depends_on:
+      - ingest
+      - price
+
+  gateway:
+    build: ./services/gateway
+    container_name: mediwatt-gateway
+    ports:
+      # The ONLY port published to your laptop. Exactly like the NodePort
+      # in Kubernetes: one door in, everything else stays private.
+      - "8080:8080"
+    environment:
+      POD_NAME: "gateway-local-1"
+      INGEST_URL: "http://ingest:8080"
+      PRICE_URL: "http://price:8080"
+      OPTIMIZER_URL: "http://optimizer:8080"
+      RATE_LIMIT: "600"
+      TZ: "Europe/Stockholm"
+    depends_on:
+      - ingest
+      - price
+      - optimizer
+
+volumes:
+  mongo-data:

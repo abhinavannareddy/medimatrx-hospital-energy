@@ -1,0 +1,265 @@
+# ===========================================================================
+#  NETWORK POLICIES - the firewall inside the cluster
+#
+#  By DEFAULT, every pod in a Kubernetes cluster can talk to every other pod.
+#  That is a big deal for a hospital system: if an attacker got a foothold in
+#  the gateway, they could reach MongoDB directly and read patient-adjacent
+#  operational data.
+#
+#  These policies implement least privilege / "zero trust" networking:
+#  each service can only receive traffic from the exact services that have a
+#  legitimate reason to call it.
+#
+#  The allowed conversations, and nothing else:
+#      internet  -> gateway
+#      gateway   -> ingest, price, optimizer
+#      optimizer -> ingest, price
+#      ingest    -> mongodb
+#      price     -> the public internet (for the price API)
+#
+#  Note: DENY rules only take effect if the cluster's networking plugin (CNI)
+#  supports NetworkPolicy. Calico, Cilium and most cloud providers do.
+#  Docker Desktop's default CNI does NOT enforce them - the objects will be
+#  created and will look correct, but nothing is blocked. Say this honestly
+#  in the video rather than claiming protection you do not have.
+# ===========================================================================
+---
+# ---- 1. Default deny: nothing may talk to anything ----------------------
+# We start by forbidding everything, then open the specific paths we need.
+# Always write the rules in this order - a default-allow firewall with a few
+# deny rules is a firewall you will eventually get wrong.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny-all
+  namespace: mediwatt
+spec:
+  podSelector: {}            # {} means "every pod in this namespace"
+  policyTypes:
+    - Ingress
+    - Egress
+
+---
+# ---- 2. Everyone needs DNS ----------------------------------------------
+# Without this, "http://ingest-service:8080" cannot be resolved to an address
+# and the whole application silently breaks. This is the single most common
+# mistake people make when they first turn on network policies.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-dns
+  namespace: mediwatt
+spec:
+  podSelector: {}
+  policyTypes: [Egress]
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+
+---
+# ---- 3. The gateway may be reached from outside the cluster --------------
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: gateway-ingress
+  namespace: mediwatt
+spec:
+  podSelector:
+    matchLabels:
+      app: gateway
+  policyTypes: [Ingress]
+  ingress:
+    - ports:
+        - protocol: TCP
+          port: 8080
+      # No "from:" block = accept from anywhere. This is the public door,
+      # and it is the ONLY pod in the system with one.
+
+---
+# ---- 4. The gateway may call the three backend services -----------------
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: gateway-egress
+  namespace: mediwatt
+spec:
+  podSelector:
+    matchLabels:
+      app: gateway
+  policyTypes: [Egress]
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              app: ingest
+        - podSelector:
+            matchLabels:
+              app: price
+        - podSelector:
+            matchLabels:
+              app: optimizer
+      ports:
+        - protocol: TCP
+          port: 8080
+
+---
+# ---- 5. Who may call the ingest service ---------------------------------
+# Only the gateway and the optimizer. Nothing else, ever.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: ingest-ingress
+  namespace: mediwatt
+spec:
+  podSelector:
+    matchLabels:
+      app: ingest
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: gateway
+        - podSelector:
+            matchLabels:
+              app: optimizer
+      ports:
+        - protocol: TCP
+          port: 8080
+
+---
+# ---- 6. The ingest service may reach ONLY the database ------------------
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: ingest-egress
+  namespace: mediwatt
+spec:
+  podSelector:
+    matchLabels:
+      app: ingest
+  policyTypes: [Egress]
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              app: mongodb
+      ports:
+        - protocol: TCP
+          port: 27017
+
+---
+# ---- 7. ONLY the ingest service may reach the database ------------------
+# This is the most important rule in the file. It is the technical
+# enforcement of the "Database per Service" pattern: even if another
+# service knew the MongoDB password, the network would refuse the
+# connection.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: mongodb-ingress
+  namespace: mediwatt
+spec:
+  podSelector:
+    matchLabels:
+      app: mongodb
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: ingest
+      ports:
+        - protocol: TCP
+          port: 27017
+
+---
+# ---- 8. Who may call the price service ----------------------------------
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: price-ingress
+  namespace: mediwatt
+spec:
+  podSelector:
+    matchLabels:
+      app: price
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: gateway
+        - podSelector:
+            matchLabels:
+              app: optimizer
+      ports:
+        - protocol: TCP
+          port: 8080
+
+---
+# ---- 9. The price service is the ONLY pod allowed onto the internet -----
+# It needs HTTPS to reach elprisetjustnu.se. We block the private address
+# ranges so that "outbound to the internet" cannot be turned into "outbound
+# to the hospital's internal network", which is how a compromised container
+# usually pivots.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: price-egress-internet
+  namespace: mediwatt
+spec:
+  podSelector:
+    matchLabels:
+      app: price
+  policyTypes: [Egress]
+  egress:
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            except:
+              - 10.0.0.0/8
+              - 172.16.0.0/12
+              - 192.168.0.0/16
+      ports:
+        - protocol: TCP
+          port: 443
+
+---
+# ---- 10. The optimizer may call ingest and price ------------------------
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: optimizer-policy
+  namespace: mediwatt
+spec:
+  podSelector:
+    matchLabels:
+      app: optimizer
+  policyTypes: [Ingress, Egress]
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: gateway
+      ports:
+        - protocol: TCP
+          port: 8080
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              app: ingest
+        - podSelector:
+            matchLabels:
+              app: price
+      ports:
+        - protocol: TCP
+          port: 8080

@@ -1,0 +1,153 @@
+# ===========================================================================
+#  THE DATABASE
+#
+#  Two things make this different from the other three services:
+#
+#  1) It is a StatefulSet, not a Deployment.
+#     A Deployment treats its pods as interchangeable cattle - it will
+#     happily destroy one and create another with a new name. A database
+#     cannot work like that: it needs a STABLE identity and it must get
+#     the SAME disk back every time it restarts. A StatefulSet guarantees
+#     both: this pod will always be called "mongodb-0", and it will always
+#     re-attach to the same volume.
+#
+#  2) It has a PersistentVolumeClaim.
+#     A container's own filesystem is thrown away when the container dies.
+#     A PersistentVolumeClaim asks Kubernetes for a piece of real disk that
+#     OUTLIVES the pod. This is what satisfies the assignment requirement
+#     that "the database must use storage which is persistent across
+#     restarts of the deployment infrastructure".
+#
+#     You can prove it in the demo:
+#         kubectl delete pod mongodb-0 -n mediwatt
+#         ... wait for it to come back ...
+#         refresh the dashboard - the data is still there.
+# ===========================================================================
+---
+# ---- The headless Service ------------------------------------------------
+# clusterIP: None means "do not load balance, just give each pod its own
+# stable DNS name". A StatefulSet needs this to give mongodb-0 a fixed
+# address. The other services simply connect to "mongodb:27017".
+apiVersion: v1
+kind: Service
+metadata:
+  name: mongodb
+  namespace: mediwatt
+  labels:
+    app: mongodb
+spec:
+  clusterIP: None
+  selector:
+    app: mongodb
+  ports:
+    - name: mongo
+      port: 27017
+      targetPort: 27017
+
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: mongodb
+  namespace: mediwatt
+  labels:
+    app: mongodb
+    app.kubernetes.io/component: database
+spec:
+  serviceName: mongodb
+  # The assignment says the database does not have to be scalable, and this
+  # one is not: exactly one replica. Scaling a database horizontally means
+  # replica sets, elections and sharding - a much bigger piece of work.
+  replicas: 1
+  selector:
+    matchLabels:
+      app: mongodb
+  template:
+    metadata:
+      labels:
+        app: mongodb
+    spec:
+      # --- Security context ------------------------------------------------
+      # Run as an ordinary user, never as root. If someone did break into
+      # this container, they would arrive with no administrative rights.
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 999
+        runAsGroup: 999
+        fsGroup: 999          # makes the mounted disk writable by that user
+
+      terminationGracePeriodSeconds: 20
+
+      containers:
+        - name: mongodb
+          image: mongo:7.0
+          imagePullPolicy: IfNotPresent
+
+          args: ["--bind_ip_all"]
+
+          ports:
+            - name: mongo
+              containerPort: 27017
+
+          # The root username and password come from the Secret.
+          env:
+            - name: MONGO_INITDB_ROOT_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: mediwatt-db-credentials
+                  key: MONGO_USER
+            - name: MONGO_INITDB_ROOT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: mediwatt-db-credentials
+                  key: MONGO_PASSWORD
+
+          # --- Resource requests and limits --------------------------------
+          # "requests" is what Kubernetes reserves when it decides which node
+          # to put this pod on. "limits" is the hard ceiling. Without limits
+          # one runaway container can starve everything else on the node.
+          resources:
+            requests:
+              cpu: "100m"        # 0.1 of a CPU core
+              memory: "256Mi"
+            limits:
+              cpu: "1000m"
+              memory: "1Gi"
+
+          # --- Probes ------------------------------------------------------
+          # Kubernetes asks MongoDB itself whether it is healthy.
+          livenessProbe:
+            exec:
+              command: ["mongosh", "--quiet", "--eval", "db.adminCommand('ping')"]
+            initialDelaySeconds: 30
+            periodSeconds: 20
+            timeoutSeconds: 10
+            failureThreshold: 4
+          readinessProbe:
+            exec:
+              command: ["mongosh", "--quiet", "--eval", "db.adminCommand('ping')"]
+            initialDelaySeconds: 15
+            periodSeconds: 10
+            timeoutSeconds: 8
+            failureThreshold: 4
+
+          volumeMounts:
+            - name: mongo-data
+              mountPath: /data/db
+
+  # --- The persistent disk -------------------------------------------------
+  # volumeClaimTemplates is the StatefulSet-only feature that gives each
+  # replica its own permanent volume, created automatically and NOT deleted
+  # when the pod is deleted.
+  volumeClaimTemplates:
+    - metadata:
+        name: mongo-data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        # storageClassName is left out on purpose so the cluster's default
+        # storage class is used - "hostpath" on Docker Desktop, "standard"
+        # on Minikube, an EBS/Azure Disk volume on a cloud provider. The same
+        # YAML therefore works everywhere.
+        resources:
+          requests:
+            storage: 2Gi

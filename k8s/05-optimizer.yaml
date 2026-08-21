@@ -1,0 +1,115 @@
+# ===========================================================================
+#  OPTIMIZER SERVICE - the stateless brain
+#
+#  This one is the best example of why microservices are worth the trouble.
+#  It is pure computation with no database of its own, so scaling it is just
+#  "run more copies". If the hospital group grows from 1 site to 50, this is
+#  the service that needs the extra replicas - and it can get them WITHOUT
+#  scaling the database, the gateway or anything else.
+# ===========================================================================
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: optimizer-service
+  namespace: mediwatt
+  labels:
+    app: optimizer
+spec:
+  type: ClusterIP
+  selector:
+    app: optimizer
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: optimizer
+  namespace: mediwatt
+  labels:
+    app: optimizer
+    app.kubernetes.io/component: backend
+spec:
+  replicas: 2
+  revisionHistoryLimit: 3
+  selector:
+    matchLabels:
+      app: optimizer
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
+  template:
+    metadata:
+      labels:
+        app: optimizer
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        fsGroup: 10001
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                labelSelector:
+                  matchLabels:
+                    app: optimizer
+                topologyKey: kubernetes.io/hostname
+      containers:
+        - name: optimizer
+          image: abhinavannareddy/mediwatt-optimizer:1.0.0
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8080
+          env:
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+          envFrom:
+            - configMapRef:
+                name: mediwatt-config
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "96Mi"
+            limits:
+              cpu: "800m"
+              memory: "256Mi"
+          startupProbe:
+            httpGet: { path: /healthz, port: http }
+            periodSeconds: 3
+            failureThreshold: 20
+          livenessProbe:
+            httpGet: { path: /healthz, port: http }
+            periodSeconds: 15
+            timeoutSeconds: 3
+            failureThreshold: 3
+          readinessProbe:
+            httpGet: { path: /readyz, port: http }
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+
+          # The root filesystem is read-only, so give the process one small
+          # scratch area for temporary files.
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+
+      volumes:
+        - name: tmp
+          emptyDir: {}

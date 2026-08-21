@@ -1,0 +1,147 @@
+# ===========================================================================
+#  INGEST SERVICE - the only service that talks to MongoDB
+# ===========================================================================
+---
+# ---- The Service ---------------------------------------------------------
+# A Service is a stable name and a built-in load balancer. Other pods call
+# "http://ingest-service:8080" and Kubernetes picks one of the running
+# ingest pods for them. When we scale from 2 pods to 10, nothing else in the
+# system has to change or even be told. THIS is what makes each microservice
+# independently horizontally scalable.
+#
+# Note it is a ClusterIP service - reachable only from INSIDE the cluster.
+# The ingest API is never exposed to the internet.
+apiVersion: v1
+kind: Service
+metadata:
+  name: ingest-service
+  namespace: mediwatt
+  labels:
+    app: ingest
+spec:
+  type: ClusterIP
+  selector:
+    app: ingest
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ingest
+  namespace: mediwatt
+  labels:
+    app: ingest
+    app.kubernetes.io/component: backend
+spec:
+  replicas: 2                     # start with 2; the HPA will change this
+  revisionHistoryLimit: 3
+  selector:
+    matchLabels:
+      app: ingest
+
+  # --- Rolling update: deploy a new version with zero downtime ------------
+  # Kubernetes brings up new pods before removing old ones, so the service
+  # never goes dark during a release.
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
+
+  template:
+    metadata:
+      labels:
+        app: ingest
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+
+      # Spread the replicas over different nodes where possible, so losing
+      # one machine does not take out every copy of the service.
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                labelSelector:
+                  matchLabels:
+                    app: ingest
+                topologyKey: kubernetes.io/hostname
+
+      containers:
+        - name: ingest
+          # >>> REPLACE "DOCKERHUB_USER" WITH YOUR OWN DOCKER HUB USERNAME <<<
+          # The script scripts/set-dockerhub-user.ps1 does this for you.
+          image: abhinavannareddy/mediwatt-ingest:1.0.0
+          imagePullPolicy: IfNotPresent
+
+          ports:
+            - name: http
+              containerPort: 8080
+
+          env:
+            # Inject this pod's own name so the API can report which replica
+            # answered. This is what makes scaling visible in the dashboard.
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+          envFrom:
+            - configMapRef:
+                name: mediwatt-config
+            - secretRef:
+                name: mediwatt-db-credentials
+
+          resources:
+            requests:
+              cpu: "50m"
+              memory: "96Mi"
+            limits:
+              cpu: "500m"
+              memory: "256Mi"
+
+          # --- The three probes --------------------------------------------
+          # startupProbe:   "have you finished booting?" - gives a slow start
+          #                 more time without loosening the liveness check.
+          # livenessProbe:  "are you alive?" - fail = restart the container.
+          # readinessProbe: "can you serve traffic?" - fail = take this pod
+          #                 out of the load balancer but leave it running.
+          #                 Ours returns 503 while MongoDB is unreachable.
+          startupProbe:
+            httpGet: { path: /healthz, port: http }
+            periodSeconds: 3
+            failureThreshold: 20
+          livenessProbe:
+            httpGet: { path: /healthz, port: http }
+            periodSeconds: 15
+            timeoutSeconds: 3
+            failureThreshold: 3
+          readinessProbe:
+            httpGet: { path: /readyz, port: http }
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 3
+
+          # --- Container hardening -----------------------------------------
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true      # nothing can be written to disk
+            capabilities:
+              drop: ["ALL"]                   # give up every Linux capability
+
+          # The root filesystem is read-only, so give the process one small
+          # scratch area. emptyDir lives only as long as the pod, which is
+          # exactly what temporary files should do.
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+
+      volumes:
+        - name: tmp
+          emptyDir: {}
