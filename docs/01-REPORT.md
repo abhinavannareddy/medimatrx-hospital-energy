@@ -1,4 +1,4 @@
-# MediWatt — Hospital Energy Optimisation Platform
+# MediWatt: Hospital Energy Optimisation Platform
 
 **Cloud Computing assignment report**
 Blekinge Institute of Technology
@@ -12,12 +12,12 @@ electricity **without ever touching the equipment that keeps patients alive**.
 
 Hospitals are unusual electricity customers. They run 24 hours a day, they cannot
 switch off, and a large regional hospital in Sweden spends in the region of
-8–15 MSEK a year on power. But not all of that load is equal:
+8-15 MSEK a year on power. But not all of that load is equal:
 
-- **Clinical load** — intensive care, operating theatres, imaging, wards. This is
+- **Clinical load**: intensive care, operating theatres, imaging, wards. This is
   life-safety equipment. It runs when the patient needs it and at no other time.
   It is not negotiable and MediWatt never touches it.
-- **Deferrable load** — the laundry, the sterilisation department, the kitchen's
+- **Deferrable load**: the laundry, the sterilisation department, the kitchen's
   bulk cooking and dishwashing, and the HVAC plant's ability to pre-cool the
   building using its own thermal mass. This work still has to happen every day,
   but *when* it happens is a choice.
@@ -38,7 +38,7 @@ MediWatt does four things:
    into the cheap ones, respecting a hard safety rule that clinical zones are
    excluded, and reports the money saved, the reduction in peak demand and the
    carbon avoided.
-4. **Watches** for equipment faults — an hour where a zone drew far more power
+4. **Watches** for equipment faults. An hour where a zone drew far more power
    than the hours either side of it usually means a chiller is short-cycling or
    an air-handling unit has a stuck damper. These waste money for weeks before
    they finally break.
@@ -48,7 +48,7 @@ wall screen.
 
 ### A note on the demo data
 
-The meter readings in the demo are **simulated** — they are generated from
+The meter readings in the demo are **simulated**: they are generated from
 realistic 24-hour load profiles for each type of hospital department, with random
 noise and two deliberately injected equipment faults. In a real deployment the
 `POST /api/readings` endpoint would be called by the hospital's existing building
@@ -57,7 +57,7 @@ management system or by IoT meter gateways; the rest of the system is unchanged.
 
 ### Scale, honestly
 
-For a single hospital this application does not truly need to scale — one pod of
+For a single hospital this application does not truly need to scale. One pod of
 each service would carry the load comfortably. The scaling story becomes real
 when MediWatt is operated as a SaaS product for a hospital *group*:
 
@@ -66,7 +66,7 @@ when MediWatt is operated as a SaaS product for a hospital *group*:
   dozens of metered zones reporting every few minutes.
 - At that point, ingest scales with the number of meters, the optimizer scales
   with the number of sites being re-planned, and the price service does not scale
-  at all — because prices are the same for everyone in a bidding area. **These
+  at all, because prices are the same for everyone in a bidding area. **These
   three things scale at completely different rates, which is precisely the
   argument for splitting them into separate microservices.**
 
@@ -87,12 +87,12 @@ re-planning every site every fifteen minutes as new price data arrives.*
                     └──────────────┬──────────────┘
                                    │  HTTP :30080
     ═══════════════════════════════╪════════════════════════════════
-      KUBERNETES CLUSTER           │  (NodePort — the only way in)
+      KUBERNETES CLUSTER           │  (NodePort - the only way in)
     ═══════════════════════════════╪════════════════════════════════
                                    ▼
                     ┌─────────────────────────────┐
                     │      API GATEWAY            │  Node.js / Express
-                    │   gateway-service           │  2–10 replicas
+                    │   gateway-service           │  2-10 replicas
                     │   serves the dashboard,     │
                     │   routes every API call     │
                     └───┬─────────┬────────┬──────┘
@@ -102,7 +102,7 @@ re-planning every site every fifteen minutes as new price data arrives.*
  ┌──────────────────┐  ┌────────────────────┐  ┌────────────────────┐
  │  INGEST SERVICE  │  │  PRICE SERVICE     │  │ OPTIMIZER SERVICE  │
  │  Node.js/Express │  │  Python / FastAPI  │  │  Python / FastAPI  │
- │  2–12 replicas   │  │  2–4 replicas      │  │  2–15 replicas     │
+ │  2-12 replicas   │  │  2-4 replicas      │  │  2-15 replicas     │
  │                  │  │                    │  │                    │
  │  owns the data   │  │  caches prices     │  │  stateless compute │
  └────────┬─────────┘  └─────────┬──────────┘  └─────┬─────────┬────┘
@@ -130,12 +130,12 @@ system and the microservices that implement them. This is that mapping.
 | # | Logical component | Implemented by | Language / framework | Owns state? | Docker Hub image |
 |---|---|---|---|---|---|
 | C1 | Presentation & entry point | **API Gateway** (`gateway`) | Node.js 20 / Express | No | `mediwatt-gateway:1.0.0` |
-| C2 | Metering data management | **Ingest Service** (`ingest`) | Node.js 20 / Express | **Yes — owns MongoDB** | `mediwatt-ingest:1.0.0` |
+| C2 | Metering data management | **Ingest Service** (`ingest`) | Node.js 20 / Express | **Yes, owns MongoDB** | `mediwatt-ingest:1.0.0` |
 | C3 | Market price acquisition | **Price Service** (`price`) | Python 3.12 / FastAPI | In-memory cache only | `mediwatt-price:1.0.0` |
-| C4 | Optimisation & analytics | **Optimizer Service** (`optimizer`) | Python 3.12 / FastAPI | No — fully stateless | `mediwatt-optimizer:1.0.0` |
+| C4 | Optimisation & analytics | **Optimizer Service** (`optimizer`) | Python 3.12 / FastAPI | No, fully stateless | `mediwatt-optimizer:1.0.0` |
 | C5 | Persistence | **MongoDB** | MongoDB 7.0 | Yes | `mongo:7.0` (official) |
 
-#### C1 — API Gateway
+#### C1: API Gateway
 
 *Responsibility:* be the single front door. Serve the dashboard's HTML, CSS and
 JavaScript, and forward each API call to whichever internal service owns that
@@ -147,7 +147,7 @@ four services would have to be exposed to the network. With it, exactly one pod
 in the system has a public door, and the other three are unreachable from outside
 the cluster.
 
-#### C2 — Ingest Service
+#### C2: Ingest Service
 
 *Responsibility:* receive meter readings, validate them, store them, and serve
 them back. It exposes `POST /api/readings` (the endpoint a smart meter calls),
@@ -159,7 +159,7 @@ the component whose load grows with the number of meters. Writing is a completel
 different workload from computing, and mixing the two in one service would mean
 scaling both when only one is under pressure.
 
-#### C3 — Price Service
+#### C3: Price Service
 
 *Responsibility:* be an HTTP client of a third-party REST API, and an HTTP server
 of our own. It calls `elprisetjustnu.se`, normalises whatever it gets into
@@ -174,7 +174,7 @@ policy can grant internet access to this one pod and no other.
 It also demonstrates the assignment requirement to *programmatically connect to
 and use a REST API*.
 
-#### C4 — Optimizer Service
+#### C4: Optimizer Service
 
 *Responsibility:* the business logic. Fetch consumption from C2 and prices from
 C3 **in parallel**, decide which hours need relief (expensive hours *and*
@@ -186,7 +186,7 @@ of recommendations. Also runs the anomaly detector.
 it the easiest thing in the system to scale and the thing that will need scaling
 first as sites are added. Any replica can answer any request.
 
-#### C5 — MongoDB
+#### C5: MongoDB
 
 *Responsibility:* durable storage of meter readings.
 
@@ -201,7 +201,7 @@ PersistentVolumeClaim**, so the data survives the pod being destroyed.
 | Pattern | Where | Why it is there |
 |---|---|---|
 | **API Gateway** | `gateway` | One public entry point; cross-cutting concerns applied once; internal services stay private. |
-| **Database per Service** | `ingest` owns MongoDB exclusively | Nobody else may touch the database — not even by knowing the password, because a NetworkPolicy blocks the connection. Services stay independently deployable. |
+| **Database per Service** | `ingest` owns MongoDB exclusively | Nobody else may touch the database, not even by knowing the password, because a NetworkPolicy blocks the connection. Services stay independently deployable. |
 | **Backend for Frontend (BFF)** | `gateway` reshapes and proxies | The browser gets one same-origin API; internal service boundaries can change without breaking the UI. |
 | **Service Discovery** | Kubernetes DNS (`http://ingest-service:8080`) | No IP address appears anywhere in the code or config. Pods can move, restart and multiply freely. |
 | **Client-side load balancing via Service** | every ClusterIP Service | Scaling a deployment automatically spreads traffic. Callers need no knowledge of replica count. |
@@ -221,7 +221,7 @@ When the estates manager opens the dashboard:
 1. The browser requests `/` from the **gateway**, which serves the single-page
    dashboard. Content-Security-Policy and four other security headers are set.
 2. The browser's JavaScript calls `GET /api/optimize?area=SE4` on the gateway
-   (same origin — it never speaks to any other service).
+   (same origin, it never speaks to any other service).
 3. The gateway rate-limits the caller, then forwards to
    `http://optimizer-service:8080/api/optimize`. Kubernetes DNS resolves that to
    one of the optimizer pods.
@@ -232,7 +232,7 @@ When the estates manager opens the dashboard:
    per-zone hourly matrix. The price pod returns a cached or freshly fetched price
    curve.
 6. The optimizer computes the plan and returns it, including the pod names of all
-   three services that took part — which is what lets the dashboard visibly prove
+   three services that took part, which is what lets the dashboard visibly prove
    that requests are being spread across replicas.
 7. The gateway relays the response. Total round trip: typically well under a
    second.
@@ -268,11 +268,11 @@ couples their scaling behaviour:
 |---|---|---|---|---|
 | `gateway` | 2 | 10 | CPU 60% | I/O-bound proxying; grows with concurrent dashboard users. |
 | `ingest` | 2 | 12 | CPU 65% **and** memory 75% | Grows with the number of meters reporting; buffers documents in memory on bulk writes, so memory matters too. |
-| `price` | 2 | **4** | CPU 70% | Deliberately capped low — each replica keeps its own cache, so more pods means more calls to somebody else's public API. |
+| `price` | 2 | **4** | CPU 70% | Deliberately capped low, each replica keeps its own cache, so more pods means more calls to somebody else's public API. |
 | `optimizer` | 2 | **15** | CPU 55% | Pure stateless computation; the highest ceiling in the system. |
 
 The scale-up and scale-down `behavior` blocks are asymmetric on purpose: react
-immediately when load arrives, shrink slowly (a 180–300 second stabilisation
+immediately when load arrives, shrink slowly (a 180-300 second stabilisation
 window) so a brief lull does not cause pods to thrash up and down.
 
 **Demonstration:** `scripts/3-demo-scaling.ps1` scales the optimizer from 2 to 6
@@ -300,15 +300,14 @@ identical total afterwards.
 
 **Independent scaling that matches real cost drivers.** Ingest scales with meter
 count, optimizer with site count, price with neither. In a monolith you would
-have to scale all of it to relieve any of it — and on a cloud bill, that is the
+have to scale all of it to relieve any of it. And on a cloud bill, that is the
 difference between paying for what you use and paying for your worst component.
 
 **Independent deployment and independent failure.** The optimisation algorithm is
-the part of this product that will change most often — it is where the
+the part of this product that will change most often. It is where the
 intellectual property is. Because it is a separate service with no database, it
 can be redeployed several times a day with a zero-downtime rolling update, while
-the meter collection service — which must never lose a reading — is touched only
-rarely. A bug in the new algorithm cannot corrupt stored data, because the
+the meter collection service, which must never lose a reading, is touched only rarely. A bug in the new algorithm cannot corrupt stored data, because the
 optimizer has no write access to any database.
 
 **Polyglot by design, not by accident.** The two data-handling services are
@@ -331,20 +330,20 @@ last replica with it.
 
 **Business benefits.** The system pays for itself: on the demo dataset it
 identifies roughly 12% off the daily energy bill plus a further reduction in the
-grid demand charge, which for a single hospital is in the order of 1.3–1.6 MSEK
-per year — against a cloud hosting cost measured in hundreds of SEK per month.
+grid demand charge, which for a single hospital is in the order of 1.3-1.6 MSEK
+per year, against a cloud hosting cost measured in hundreds of SEK per month.
 It sells as SaaS: one deployment can serve many hospitals, and the marginal cost
 of the next customer is a few more optimizer pods. It also produces an auditable
 carbon-reduction figure, which matters for public-sector procurement in Sweden.
 
 ---
 
-## 5. Challenges — and what was done about them
+## 5. Challenges and what was done about them
 
 ### 5.1 Distributed systems are harder than a monolith
 
 **The challenge.** A single call to `/api/optimize` becomes three network hops.
-Every hop can be slow, can fail, or can succeed slowly — which is worse. There is
+Every hop can be slow, can fail, or can succeed slowly, which is worse. There is
 no stack trace that spans all four services.
 
 **What was done.** Every service emits structured JSON logs on one line, tagged
@@ -398,7 +397,7 @@ configured one.
 than being quietly wrong.
 
 **What remains.** Move the counter to Redis, or better, move rate limiting to the
-ingress controller where it belongs — the commented Ingress in `06-gateway.yaml`
+ingress controller where it belongs, the commented Ingress in `06-gateway.yaml`
 includes an `nginx.ingress.kubernetes.io/limit-rps` annotation showing this.
 
 ### 5.5 Operational complexity
@@ -425,14 +424,14 @@ Security is discussed here in the order an attacker would meet it.
 ### 6.1 What was done
 
 **One door, not four.** Only the gateway has a NodePort. The ingest, price and
-optimizer services are ClusterIP — they have no address reachable from outside
+optimizer services are ClusterIP. They have no address reachable from outside
 the cluster at all. Three of the four services simply cannot be attacked from the
 internet.
 
 **Default-deny network policy.** Kubernetes by default lets every pod talk to
 every other pod. `08-network-policy.yaml` reverses that: a `default-deny-all`
 policy blocks everything, then ten policies open only the conversations the
-system actually needs. The most important is `mongodb-ingress` — **only** pods
+system actually needs. The most important is `mongodb-ingress`, **only** pods
 labelled `app: ingest` may open a TCP connection to MongoDB. Even an attacker who
 stole the database password from a compromised optimizer pod would find the
 network refusing the connection. This is lateral-movement containment, and it is
@@ -440,7 +439,7 @@ the difference between one compromised pod and a compromised cluster.
 
 **Least-privilege containers.** Every container runs as a non-root user
 (`runAsNonRoot: true`), with `allowPrivilegeEscalation: false`, with **all** Linux
-capabilities dropped, and with a **read-only root filesystem** — a compromised
+capabilities dropped, and with a **read-only root filesystem**: a compromised
 process cannot write a payload to disk. A small `emptyDir` is mounted at `/tmp`
 for legitimate temporary files.
 
@@ -451,9 +450,9 @@ protection as much as it is capacity planning.
 **Input validation at the boundary.** `POST /api/readings` rejects unknown zone
 IDs, non-numeric or out-of-range kWh values, and malformed timestamps, returning
 400 with a clear message. The price service constrains the `area` parameter with
-the regular expression `^SE[1-4]$` and the window length to 1–12 via FastAPI's
+the regular expression `^SE[1-4]$` and the window length to 1-12 via FastAPI's
 validators. **Because MongoDB is only ever addressed through the driver with
-parameterised documents — never by concatenating strings into a query — NoSQL
+parameterised documents, never by concatenating strings into a query, NoSQL
 injection is not reachable.**
 
 **Output encoding in the browser.** Every value rendered into the dashboard passes
@@ -475,8 +474,7 @@ version to anyone scanning.
 a Kubernetes Secret and arrive as environment variables. Nothing in the Git
 repository contains a working credential.
 
-**Safety as a security property.** The optimizer contains a hard rule that zones
-flagged `critical` — ICU, theatres, imaging, wards — are never shifted, reduced or
+**Safety as a security property.** The optimizer contains a hard rule that zones flagged `critical` (ICU, theatres, imaging, wards) are never shifted, reduced or
 delayed, and the API states this explicitly in every response. In a clinical
 setting, an optimisation that could throttle an operating theatre is not a feature
 with a bug; it is a patient-safety incident. The safest place for that rule is in
@@ -506,21 +504,20 @@ table is defence in depth; those two are the front door standing open.
 
 ## 7. Conclusion
 
-MediWatt demonstrates all of the assignment's technical requirements — four
+MediWatt demonstrates all of the assignment's technical requirements: four
 independently scalable microservices in two languages, each with its own REST
 API, a MongoDB database on persistent storage, external access through a browser,
-images published to Docker Hub, and a complete Kubernetes deployment — while
+images published to Docker Hub, and a complete Kubernetes deployment, while
 solving a problem that a Swedish hospital actually has.
 
 The architecture's real justification is not that microservices are fashionable.
-It is that the three workloads in this system — high-volume writes, third-party
-data acquisition, and CPU-bound optimisation — grow at genuinely different rates
+It is that the three workloads in this system (high-volume writes, third-party data acquisition, and CPU-bound optimisation) grow at genuinely different rates
 as the customer base grows, and only a distributed architecture lets each one be
 paid for separately.
 
 ---
 
-## Appendix A — Complete REST API
+## Appendix A: Complete REST API
 
 All endpoints are reachable through the gateway at `http://localhost:30080`.
 
@@ -553,13 +550,13 @@ All endpoints are reachable through the gateway at `http://localhost:30080`.
 
 | Method | Path | Description |
 |---|---|---|
-| `GET` | `/healthz` | Liveness — on every service. |
-| `GET` | `/readyz` | Readiness — on every service. |
+| `GET` | `/healthz` | Liveness, on every service. |
+| `GET` | `/readyz` | Readiness, on every service. |
 | `GET` | `/api/topology` | Which pod is currently serving each service. |
 
 ---
 
-## Appendix B — Technology choices
+## Appendix B: Technology choices
 
 | Choice | Alternative considered | Why this one |
 |---|---|---|

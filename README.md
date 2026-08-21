@@ -1,7 +1,7 @@
-# MediWatt — Hospital Energy Optimisation Platform
+# MediWatt: Hospital Energy Optimisation Platform
 
 A microservice application that cuts a hospital's electricity bill by moving
-deferrable work into cheap-electricity hours — **without ever touching clinical
+deferrable work into cheap-electricity hours, **without ever touching clinical
 load**.
 
 Built for the Cloud Computing assignment at Blekinge Institute of Technology.
@@ -14,22 +14,21 @@ Uses **live Swedish electricity spot prices** from the public
 
 Swedish electricity is priced hourly on a day-ahead market, and the cheapest hour
 of the day typically costs about a third of the most expensive hour. Hospitals
-run 24/7 and spend 8–15 MSEK a year on power — but only part of that load is
+run 24/7 and spend 8-15 MSEK a year on power, but only part of that load is
 negotiable.
 
 MediWatt separates the two:
 
-- **Clinical load** — ICU, operating theatres, imaging, wards. Never touched.
+- **Clinical load**: ICU, operating theatres, imaging, wards. Never touched.
   This is enforced server-side, in the optimizer, where a user interface cannot
   bypass it.
-- **Deferrable load** — laundry, sterilisation, catering, HVAC pre-cooling. The
+- **Deferrable load**: laundry, sterilisation, catering, HVAC pre-cooling. The
   work still happens today; *when* it happens is a choice.
 
 It then reports the money saved, the reduction in peak demand (a separate bill),
 the carbon avoided, and any equipment behaving like it is about to fail.
 
-On the demo dataset: **~12% off the energy bill plus a peak-demand reduction —
-in the order of 1.3–1.6 MSEK per year for a single hospital.**
+On the demo dataset: **~12% off the energy bill plus a peak-demand reduction, in the order of 1.3-1.6 MSEK per year for a single hospital.**
 
 ---
 
@@ -49,10 +48,10 @@ Browser ──► API Gateway (Node.js) ──┬──► Ingest Service (Node.
 
 | Service | Language | Replicas | Owns state | Role |
 |---|---|---|---|---|
-| **gateway** | Node.js / Express | 2–10 | no | Single public entry point; serves the dashboard; routing, rate limiting, security headers |
-| **ingest** | Node.js / Express | 2–12 | **MongoDB** | Receives and stores meter readings; serves 24-hour aggregates |
-| **price** | Python / FastAPI | 2–4 | cache only | Fetches live spot prices; caches; degrades gracefully when upstream fails |
-| **optimizer** | Python / FastAPI | 2–15 | no | Computes the load-shifting plan, savings and anomalies |
+| **gateway** | Node.js / Express | 2-10 | no | Single public entry point; serves the dashboard; routing, rate limiting, security headers |
+| **ingest** | Node.js / Express | 2-12 | **MongoDB** | Receives and stores meter readings; serves 24-hour aggregates |
+| **price** | Python / FastAPI | 2-4 | cache only | Fetches live spot prices; caches; degrades gracefully when upstream fails |
+| **optimizer** | Python / FastAPI | 2-15 | no | Computes the load-shifting plan, savings and anomalies |
 | **mongodb** | MongoDB 7.0 | 1 | **yes** | Persistent storage on a PersistentVolumeClaim |
 
 **Patterns used:** API Gateway · Database per Service · Backend for Frontend ·
@@ -85,7 +84,7 @@ can go wrong: **[`docs/02-RUN-GUIDE.md`](docs/02-RUN-GUIDE.md)**
 
 ### Without Kubernetes
 
-To run the whole system locally in about 30 seconds — useful for telling code
+To run the whole system locally in about 30 seconds, useful for telling code
 problems apart from cluster problems:
 
 ```powershell
@@ -113,10 +112,10 @@ powershell -ExecutionPolicy Bypass -File .\scripts\4-demo-persistence.ps1
 ```
 mediwatt/
 ├── services/
-│   ├── gateway/        Node.js  — API gateway + the dashboard (public/index.html)
-│   ├── ingest/         Node.js  — meter data, MongoDB owner
-│   ├── price/          Python   — live electricity prices
-│   └── optimizer/      Python   — the optimisation brain
+│   ├── gateway/        Node.js  - API gateway + the dashboard (public/index.html)
+│   ├── ingest/         Node.js  - meter data, MongoDB owner
+│   ├── price/          Python   - live electricity prices
+│   └── optimizer/      Python   - the optimisation brain
 ├── k8s/
 │   ├── 00-namespace.yaml
 │   ├── 01-config-and-secrets.yaml
@@ -170,8 +169,8 @@ GET  /api/anomalies                  equipment faults detected
 ### Operational
 
 ```
-GET  /healthz                        liveness  — on every service
-GET  /readyz                         readiness — on every service
+GET  /healthz                        liveness  - on every service
+GET  /readyz                         readiness - on every service
 GET  /api/topology                   which pod is serving each service
 ```
 
@@ -181,14 +180,14 @@ GET  /api/topology                   which pod is serving each service
 
 | Requirement | Where it is met |
 |---|---|
-| Deployable using Kubernetes | `k8s/` — 30 objects across 9 files |
+| Deployable using Kubernetes | `k8s/`, 30 objects across 9 files |
 | At least two types of microservice + a database | Four services in two languages + MongoDB |
 | Each microservice implements a REST API | See the API section above |
 | Accessible from outside Kubernetes | NodePort 30080 in a web browser |
 | All microservices independently horizontally scalable | 4 separate HPAs in `07-autoscaling.yaml` |
 | Images pushed to Docker Hub | `scripts/1-build-and-push.ps1` |
 | Database as a separate microservice | MongoDB StatefulSet |
-| Storage persistent across restarts | `volumeClaimTemplates` — proven by `scripts/4-demo-persistence.ps1` |
+| Storage persistent across restarts | `volumeClaimTemplates`, proven by `scripts/4-demo-persistence.ps1` |
 | Programmatically connect to and use a REST API | Price service → elprisetjustnu.se; optimizer → ingest + price |
 | Acknowledge if too small to warrant scaling | `docs/01-REPORT.md` §1, "Scale, honestly" |
 
@@ -198,16 +197,16 @@ GET  /api/topology                   which pod is serving each service
 
 Stated openly, with the fix, in `docs/01-REPORT.md` §5 and §6:
 
-- **No authentication** — anyone who can reach port 30080 can use it. Fix: OIDC at
+- **No authentication**: anyone who can reach port 30080 can use it. Fix: OIDC at
   the ingress with role-based access.
-- **Plain HTTP inside the cluster** — fix: a service mesh with mutual TLS.
-- **Kubernetes Secrets are base64, not encrypted** — fix: an external vault with
+- **Plain HTTP inside the cluster**. Fix: a service mesh with mutual TLS.
+- **Kubernetes Secrets are base64, not encrypted**. Fix: an external vault with
   rotating credentials.
-- **NetworkPolicies are not enforced on Docker Desktop** — the objects are correct
+- **NetworkPolicies are not enforced on Docker Desktop**: the objects are correct
   but its default CNI ignores them. Enforced on Calico or Cilium.
 - **Rate limiting is per-pod**, so the real limit is (limit × replicas). Fix:
   Redis, or rate limit at the ingress.
-- **Single MongoDB pod** — a single point of failure, accepted because the
+- **Single MongoDB pod**: a single point of failure, accepted because the
   assignment states the database need not be scalable. Fix: a three-member replica
   set with tested backups.
 
@@ -215,4 +214,4 @@ Stated openly, with the fix, in `docs/01-REPORT.md` §5 and §6:
 
 ## Licence
 
-MIT — coursework project.
+MIT licence. Coursework project.

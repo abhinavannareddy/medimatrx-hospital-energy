@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>MediWatt — Hospital Energy Optimisation</title>
+<title>MediWatt: Hospital Energy Optimisation</title>
 <!-- Inline favicon so the page makes zero external requests. -->
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%233987e5'/%3E%3Cpath d='M17.5 4 8 18h6l-1.5 10L23 14h-6z' fill='%23fff'/%3E%3C/svg%3E">
 <style>
@@ -25,8 +25,8 @@
     --axis:         #383835;
     --border:       rgba(255,255,255,0.10);
 
-    --baseline:     #d95926;   /* series 1 — how the hospital runs today   */
-    --optimised:    #3987e5;   /* series 2 — the MediWatt plan             */
+    --baseline:     #d95926;   /* series 1: how the hospital runs today   */
+    --optimised:    #3987e5;   /* series 2: the MediWatt plan             */
     --price:        #199e70;   /* price series, own panel                  */
 
     --good:         #0ca30c;
@@ -186,10 +186,10 @@
     </div>
     <div class="controls">
       <select id="area" title="Swedish electricity bidding area">
-        <option value="SE1">SE1 — Luleå</option>
-        <option value="SE2">SE2 — Sundsvall</option>
-        <option value="SE3">SE3 — Stockholm</option>
-        <option value="SE4" selected>SE4 — Malmö</option>
+        <option value="SE1">SE1 (Luleå)</option>
+        <option value="SE2">SE2 (Sundsvall)</option>
+        <option value="SE3">SE3 (Stockholm)</option>
+        <option value="SE4" selected>SE4 (Malmö)</option>
       </select>
       <button id="seed" title="Generate 24 hours of meter readings in the database">Load demo day</button>
       <button id="refresh" class="primary">Refresh</button>
@@ -198,8 +198,8 @@
 
   <div class="status">
     <span class="badge"><span class="dot" id="live-dot" style="background:var(--muted)"></span><span id="live-text">connecting…</span></span>
-    <span id="price-source">—</span>
-    <span id="updated">—</span>
+    <span id="price-source">...</span>
+    <span id="updated">...</span>
   </div>
 
   <div id="error" class="card err hidden"></div>
@@ -252,7 +252,7 @@
     <h2>Live infrastructure</h2>
     <p class="desc">
       Which Kubernetes pod answered this page load. Scale a deployment up with
-      <code>kubectl scale</code> and press Refresh — the names change as the load balancer
+      <code>kubectl scale</code> and press Refresh, and the names change as the load balancer
       spreads requests across the replicas.
     </p>
     <div class="pods" id="pods"></div>
@@ -433,7 +433,7 @@ function renderChart(o) {
   const pts = price.map((v, h) => `${(xCol(h) + colW / 2).toFixed(1)},${yB(v).toFixed(1)}`).join(' ');
   svg += `<polyline points="${pts}" fill="none" stroke="var(--price)" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>`;
 
-  // Direct labels on the cheapest and dearest hour — never a label on every point.
+  // Direct labels on the cheapest and dearest hour, never a label on every point.
   const pMin = price.indexOf(Math.min(...price));
   const pMax = price.indexOf(Math.max(...price));
   // Both labels sit ABOVE their point: the cheapest hour is near the bottom
@@ -473,7 +473,7 @@ function renderChart(o) {
       cross.setAttribute('opacity', '0.35');
       const diff = base[h] - opt[h];
       tip.innerHTML = `
-        <div class="th">${String(h).padStart(2, '0')}:00 – ${String((h + 1) % 24).padStart(2, '0')}:00</div>
+        <div class="th">${String(h).padStart(2, '0')}:00-${String((h + 1) % 24).padStart(2, '0')}:00</div>
         <div class="row"><span style="color:var(--baseline)">Today</span><span>${nf0.format(base[h])} kWh</span></div>
         <div class="row"><span style="color:var(--optimised)">Plan</span><span>${nf0.format(opt[h])} kWh</span></div>
         <div class="row"><span style="color:var(--price)">Price</span><span>${nf2.format(price[h])} kr/kWh</span></div>
@@ -542,7 +542,7 @@ function renderZones(zones, o) {
   const rows = zones.map(z => `
     <tr>
       <td>${escapeHtml(z.name)}</td>
-      <td>${z.critical ? '<span class="tag clinical">clinical — protected</span>'
+      <td>${z.critical ? '<span class="tag clinical">clinical: protected</span>'
                        : z.shiftable ? '<span class="tag shiftable">deferrable</span>'
                        : '<span class="tag">fixed</span>'}</td>
       <td class="num">${nf0.format(z.baselineKw)} kW</td>

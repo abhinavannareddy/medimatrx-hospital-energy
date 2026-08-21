@@ -6,11 +6,11 @@ likely to ask and an answer you can give in your own words.
 
 **Read this until you can answer without looking.** An examiner can tell the
 difference between someone who understands their system and someone reading a
-script — and the questions are where the difference shows.
+script, and the questions are where the difference shows.
 
 ---
 
-## Part 0 — Understand your own code first
+## Part 0: Understand your own code first
 
 Before the questions, make sure you can explain these five things. They are the
 whole system.
@@ -19,7 +19,7 @@ whole system.
 
 The browser asks the **gateway** for the dashboard. The dashboard's JavaScript
 then calls `GET /api/optimize` on the gateway. The gateway forwards that to the
-**optimizer**. The optimizer makes two calls at the same time — one to **ingest**
+**optimizer**. The optimizer makes two calls at the same time, one to **ingest**
 asking "what did the hospital use in each of the last 24 hours?" and one to
 **price** asking "what does electricity cost in each hour today?". The optimizer
 does the maths and sends the answer back up the chain.
@@ -32,12 +32,12 @@ Four steps, and you should be able to say them in order:
    used by the price in that hour, and add it all up.
 2. **Decide which hours to relieve.** An hour needs relieving if *either* the
    price is above the daily average, *or* the whole site is near its daily peak.
-   Two reasons, because the hospital pays two different bills — an energy bill
+   Two reasons, because the hospital pays two different bills: an energy bill
    and a demand charge based on its single highest hour.
 3. **Move the flexible load.** For each deferrable zone, take a fixed percentage
    of its load out of the relief hours (85% for laundry, 65% for sterilisation,
    45% for catering, only 30% for HVAC because thermal mass is limited), and put
-   it back into the cheapest remaining hours — capped per hour so we never create
+   it back into the cheapest remaining hours, capped per hour so we never create
    a brand-new spike.
 4. **Add it up again** and report the difference.
 
@@ -49,7 +49,7 @@ For each hour, it compares that hour against the average of the hour before and
 the hour after. If an hour is 1.6× higher (or less than half) of its neighbours,
 and the gap is worth something in absolute terms, it is flagged.
 
-**Be ready for the follow-up "why not standard deviation?"** — because a
+**Be ready for the follow-up "why not standard deviation?"**: because a
 hospital's load is *supposed* to swing during the day. The HVAC plant genuinely
 runs at four times its night load every afternoon, so measured against the whole
 day that is not unusual. What is never legitimate is a step that the neighbouring
@@ -71,13 +71,13 @@ policy.
 
 ---
 
-## Part 1 — Your software application idea
+## Part 1: Your software application idea
 
 **"Why hospitals?"**
 
 > Three reasons. They're enormous energy users that run 24/7, so the absolute
 > savings are large. They have a genuinely clear split between load you may never
-> touch and load you may — most industries don't have that line drawn so sharply.
+> touch and load you may. Most industries don't have that line drawn so sharply.
 > And in Sweden public-sector organisations have hard carbon-reduction targets,
 > so the environmental result is a purchasing driver, not just a nice-to-have.
 
@@ -87,7 +87,7 @@ policy.
 > elprisetjustnu.se API. The meter readings are simulated from realistic 24-hour
 > load profiles for each department type, with noise and two deliberately
 > injected equipment faults. In a real deployment the same POST endpoint would be
-> called by the hospital's building management system — nothing else in the
+> called by the hospital's building management system. Nothing else in the
 > architecture would change.
 
 **"Would a hospital actually buy this?"**
@@ -100,7 +100,7 @@ policy.
 
 **"What would you build next?"**
 
-> Three things, in order. First, actual control — right now it recommends, it
+> Three things, in order. First, actual control: right now it recommends, it
 > doesn't act; connecting to the building management system over BACnet or Modbus
 > is where the value multiplies. Second, weather forecasts, because HVAC load is
 > mostly a function of outside temperature. Third, learning each zone's real
@@ -108,14 +108,14 @@ policy.
 
 ---
 
-## Part 2 — Architecture design decisions
+## Part 2: Architecture design decisions
 
 **"Why four microservices and not one application?"**
 
 > Because the three workloads scale with completely different things. Ingest
 > scales with the number of meters. The optimizer scales with the number of sites
 > being re-planned. The price service doesn't scale at all, because the price is
-> identical for everyone in a bidding area — one cache serves a thousand
+> identical for everyone in a bidding area. One cache serves a thousand
 > hospitals. In a monolith I'd have to scale all three to relieve any one of them,
 > and I'd be paying for it.
 >
@@ -134,7 +134,7 @@ policy.
 
 **"Why is the optimizer stateless? Why does that matter?"**
 
-> Stateless means it holds nothing between requests — every answer is computed
+> Stateless means it holds nothing between requests. Every answer is computed
 > from scratch from data it fetches over REST. That's the precondition for
 > horizontal scaling: if any replica can answer any request, Kubernetes can run
 > one copy or fifty and the load balancer doesn't need to care which one you get.
@@ -146,7 +146,7 @@ policy.
 > Meter readings are schemaless time-series documents, written far more often
 > than they're updated, and read back with aggregations. A document store fits
 > that without a schema migration every time a new meter type appears. Honestly,
-> at very large scale TimescaleDB — Postgres with time-series extensions — would
+> at very large scale TimescaleDB (Postgres with time-series extensions) would
 > probably be the better choice, because it has proper time-series compression
 > and continuous aggregates.
 
@@ -164,18 +164,17 @@ policy.
 > REST because it's readable in a browser and with curl, which makes debugging a
 > distributed system enormously easier, and because the assignment asks for it.
 > gRPC would be measurably faster for the internal calls. A message queue between
-> the meters and the ingest service would be the right answer at real scale — it
+> the meters and the ingest service would be the right answer at real scale, it
 > decouples the write rate from the database's ability to absorb it and gives you
 > a buffer during a database outage. That's on my list.
 
 ---
 
-## Part 3 — Business implications
+## Part 3: Business implications
 
 **"What does this architecture cost to run?"**
 
-> On a managed Kubernetes service, this fits in a small two-node cluster —
-> roughly 700 to 1500 SEK a month including storage. Against savings measured in
+> On a managed Kubernetes service, this fits in a small two-node cluster, roughly 700 to 1500 SEK a month including storage. Against savings measured in
 > millions per hospital, hosting is a rounding error. The real cost is
 > engineering time: microservices need CI/CD, monitoring and someone who
 > understands Kubernetes, and that's a salary, not a server.
@@ -204,12 +203,12 @@ policy.
 
 > The buyer is the estates or facilities director; the blocker is the clinical
 > safety officer. That's why the "clinical zones are never touched" rule is
-> enforced server-side and stated explicitly in every API response — it's not a
+> enforced server-side and stated explicitly in every API response, it's not a
 > feature, it's the thing that gets you through the door.
 
 ---
 
-## Part 4 — Interaction between microservices
+## Part 4: Interaction between microservices
 
 **"Walk me through what happens when I press Refresh."**
 
@@ -223,7 +222,7 @@ Use the flow from Part 0, question 1. Then add:
 
 **"How does one service find another?"**
 
-> Kubernetes DNS. The optimizer calls `http://ingest-service:8080` — that's a
+> Kubernetes DNS. The optimizer calls `http://ingest-service:8080`. That's a
 > Service name, not an IP address. Kubernetes resolves it to whichever ingest pods
 > are currently healthy and load balances across them. There is no IP address
 > anywhere in my code or configuration, which is why pods can restart, move to a
@@ -235,7 +234,7 @@ Use the flow from Part 0, question 1. Then add:
 > dependency failed. The dashboard shows a clear error instead of hanging.
 >
 > But more interestingly: the price service is designed so that this almost never
-> happens. If its *upstream* — the public price API — is down, the price service
+> happens. If its *upstream*, the public price API, is down, the price service
 > doesn't fail. It serves its stale cache, and if it has no cache it serves a
 > modelled price curve, marked as `modelled-fallback` in the response and labelled
 > in the UI. That's graceful degradation: one number gets less accurate instead of
@@ -244,7 +243,7 @@ Use the flow from Part 0, question 1. Then add:
 **"What happens if MongoDB is down?"**
 
 > The ingest service's readiness probe starts failing, so Kubernetes takes those
-> pods out of the load balancer — they stay running, they just stop receiving
+> pods out of the load balancer. They stay running, they just stop receiving
 > traffic. The ingest service retries the connection forever with backoff rather
 > than crash-looping. The price service and the dashboard keep working. When
 > MongoDB comes back, ingest reconnects on its own and readiness recovers.
@@ -262,13 +261,13 @@ Use the flow from Part 0, question 1. Then add:
 
 ---
 
-## Part 5 — Deployment details
+## Part 5: Deployment details
 
 **"How is the application accessible from outside the cluster?"**
 
 > The gateway's Service is type NodePort on port 30080. On Docker Desktop the
 > node is my laptop, so it's at localhost:30080. The other three services are
-> ClusterIP — they have no externally reachable address at all. In production I'd
+> ClusterIP, they have no externally reachable address at all. In production I'd
 > use an Ingress with TLS instead, and I've included that definition, commented
 > out, in `06-gateway.yaml`.
 
@@ -279,7 +278,7 @@ Use the flow from Part 0, question 1. Then add:
 > optimizer can go to fifteen pods while the price service stays at two.
 >
 > The price service is deliberately capped at four, by the way, because each
-> replica keeps its own cache — more pods would mean more calls to somebody else's
+> replica keeps its own cache. More pods would mean more calls to somebody else's
 > free public API. That's a design decision, not a limitation.
 >
 > I demonstrate it by scaling only the optimizer and showing the other three
@@ -291,13 +290,12 @@ Use the flow from Part 0, question 1. Then add:
 > PersistentVolumeClaim that is *not* deleted when the pod is. I prove it by
 > deleting the pod outright and showing the data is still there afterwards.
 >
-> I deliberately left `storageClassName` out so the cluster's default is used —
-> hostpath on Docker Desktop, an EBS volume on AWS. The same YAML deploys
+> I deliberately left `storageClassName` out so the cluster's default is used, hostpath on Docker Desktop, an EBS volume on AWS. The same YAML deploys
 > everywhere.
 
 **"Why a StatefulSet and not a Deployment?"**
 
-> A Deployment treats pods as interchangeable — it will happily destroy one and
+> A Deployment treats pods as interchangeable. It will happily destroy one and
 > create another with a new name and potentially a different volume. A database
 > needs a stable identity and needs the *same* disk every time. A StatefulSet
 > guarantees both: the pod is always called `mongodb-0` and always re-attaches to
@@ -305,16 +303,16 @@ Use the flow from Part 0, question 1. Then add:
 
 **"What are the three probes for?"**
 
-> Startup: "have you finished booting?" — it gives a slow start more time without
-> loosening the liveness check. Liveness: "are you alive?" — failing it restarts
-> the container. Readiness: "can you serve traffic?" — failing it removes the pod
+> Startup: "have you finished booting?" It gives a slow start more time without
+> loosening the liveness check. Liveness: "are you alive?" Failing it restarts
+> the container. Readiness: "can you serve traffic?" Failing it removes the pod
 > from load balancing but leaves it running to recover. My ingest service returns
 > 503 on readiness while MongoDB is unreachable, which is exactly the case
 > readiness exists for.
 
 **"What happens during a deployment of a new version?"**
 
-> A rolling update with `maxUnavailable: 0` and `maxSurge: 1` — Kubernetes brings
+> A rolling update with `maxUnavailable: 0` and `maxSurge: 1`. Kubernetes brings
 > a new pod up and waits for it to pass readiness *before* removing an old one, so
 > capacity never drops. Combined with the PodDisruptionBudget, which stops an
 > administrator draining a node from taking the last replica, releases are
@@ -322,7 +320,7 @@ Use the flow from Part 0, question 1. Then add:
 
 ---
 
-## Part 6 — Security
+## Part 6: Security
 
 **"What security measures have you implemented?"**
 
@@ -352,26 +350,26 @@ Give four, in order of importance:
 > provider, enforced at the ingress, with role-based access so estates staff read
 > and only service accounts write.
 >
-> And all internal traffic is plain HTTP. The fix is a service mesh — Istio or
-> Linkerd — giving automatic mutual TLS between every pod, plus TLS termination
+> And all internal traffic is plain HTTP. The fix is a service mesh, Istio or
+> Linkerd, giving automatic mutual TLS between every pod, plus TLS termination
 > at the ingress with a real certificate.
 >
 > Beyond those: Kubernetes Secrets are only base64-encoded, not encrypted, so I'd
 > move to an external vault with rotating credentials. My rate limiter counts in
 > one pod's memory, so with four replicas the real limit is four times what I
-> configured — it belongs in Redis or at the ingress. And there's no image
+> configured, it belongs in Redis or at the ingress. And there's no image
 > scanning in a pipeline yet.
 
 **"Is your NetworkPolicy actually working?"**
 
-> On Docker Desktop, no — its default CNI doesn't enforce NetworkPolicies, so the
+> On Docker Desktop, no. Its default CNI doesn't enforce NetworkPolicies, so the
 > objects are created and look correct but nothing is blocked. On a cluster with
 > Calico or Cilium the identical YAML is enforced. I'd rather say that than claim
 > protection I don't have.
 
 **"Is SQL injection possible?"**
 
-> There's no SQL — it's MongoDB. NoSQL injection is the equivalent risk, and it
+> There's no SQL. It's MongoDB. NoSQL injection is the equivalent risk, and it
 > isn't reachable here because I only ever address MongoDB through the driver with
 > parameterised documents, never by building a query out of concatenated strings.
 > On top of that, `zoneId` is checked against a fixed list of nine values before
@@ -388,16 +386,16 @@ Give four, in order of importance:
 
 ## The three questions people fail on
 
-**"Explain this line of code."** — Pick any five random lines from
+**"Explain this line of code."**: Pick any five random lines from
 `optimizer/main.py` and `ingest/server.js` and practise explaining them out loud.
 
-**"What would you do differently?"** — Have a real answer ready. Mine: start as a
+**"What would you do differently?"**: Have a real answer ready. Mine: start as a
 modular monolith and split out the optimizer first, when scaling pressure actually
 appears; add OpenTelemetry tracing from day one, because debugging four services
 without it is genuinely painful; and put a message queue between the meters and
 ingest.
 
-**"What's the weakest part of your system?"** — Say the single MongoDB pod. It's
+**"What's the weakest part of your system?"**: Say the single MongoDB pod. It's
 a single point of failure, I accepted it knowingly because the assignment says
 the database needn't be scalable, and the production answer is a three-member
 replica set across availability zones with tested backups.

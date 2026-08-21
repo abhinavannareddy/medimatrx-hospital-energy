@@ -1,6 +1,6 @@
-# Video script — 8 minutes
+# Video script: 8 minutes
 
-The assignment asks for 5–10 minutes covering: what the project is, what each
+The assignment asks for 5-10 minutes covering: what the project is, what each
 microservice does, running it on Kubernetes, accessing it through a browser,
 showing log output, and walking through the YAML.
 
@@ -17,12 +17,12 @@ This script covers all six, in that order, with timings.
 - Do a 20-second test recording first and check your microphone actually works.
 
 **Speak slowly.** Everyone rushes their first take. If you fumble a sentence,
-pause for three seconds and say it again — you can cut it later, or just leave it,
+pause for three seconds and say it again. You can cut it later, or just leave it,
 because examiners do not care about a stumble.
 
 ---
 
-## 0:00 – 0:50 — What the problem is
+## 0:00-0:50: What the problem is
 
 > "Hi, I'm Abhinav. This is MediWatt, a microservice application for optimising
 > energy use in hospitals.
@@ -34,17 +34,16 @@ because examiners do not care about a stumble.
 > expensive hour costs.
 >
 > Now, a lot of what a hospital does with electricity is completely
-> non-negotiable — intensive care, operating theatres, imaging. You do not
+> non-negotiable, intensive care, operating theatres, imaging. You do not
 > reschedule those. But some of it *is* negotiable. The laundry, the sterilisation
-> department, bulk cooking, and pre-cooling the building with the HVAC plant —
-> that work has to happen every day, but it does not matter what hour it happens in.
+> department, bulk cooking, and pre-cooling the building with the HVAC plant. That work has to happen every day, but it does not matter what hour it happens in.
 >
 > MediWatt finds that flexible load and moves it into the cheap hours. And it has
 > one hard rule built into the code: it never, ever touches clinical load."
 
 ---
 
-## 0:50 – 2:30 — The dashboard (browser on screen)
+## 0:50-2:30: The dashboard (browser on screen)
 
 Switch to the browser. Point at things as you talk.
 
@@ -53,7 +52,7 @@ Switch to the browser. Point at things as you talk.
 >
 > **[point at the top tiles]** These are the results for today. About one and a
 > half million kronor a year, which is roughly a twelve percent cut in the energy
-> bill, plus a reduction in the grid demand charge — that's a separate bill the
+> bill, plus a reduction in the grid demand charge, that's a separate bill the
 > hospital pays based on its single highest hour of the month, which is why
 > flattening the peak matters on its own.
 >
@@ -69,7 +68,7 @@ Switch to the browser. Point at things as you talk.
 > **[hover over a bar]** If I hover, I get the exact numbers for that hour and
 > what the change is worth.
 >
-> **[scroll to recommendations]** These are the actual recommendations — move this
+> **[scroll to recommendations]** These are the actual recommendations, move this
 > much laundry load into this window, save this much. And note the last one:
 > *no action taken in four clinical zones*. That's the safety rule, and it's
 > enforced on the server, not in the interface, so it can't be bypassed.
@@ -81,10 +80,10 @@ Switch to the browser. Point at things as you talk.
 
 ---
 
-## 2:30 – 4:00 — The architecture and the four microservices
+## 2:30-4:00: The architecture and the four microservices
 
 Switch to VS Code, open `docs/01-REPORT.md` and scroll to the architecture
-diagram — or just talk over the dashboard.
+diagram, or just talk over the dashboard.
 
 > "Architecturally this is four microservices plus a database, and they're
 > deliberately split along the lines of *how they scale*, not how the code is
@@ -92,18 +91,18 @@ diagram — or just talk over the dashboard.
 >
 > **The gateway** is Node.js and Express. It's the only service exposed outside
 > the cluster. It serves the dashboard and routes every API call. It's also where
-> I do security once instead of four times — the security headers, the rate
+> I do security once instead of four times, the security headers, the rate
 > limiting, the upstream timeouts.
 >
 > **The ingest service** is also Node.js. It's the only service allowed to touch
-> MongoDB — that's the Database-per-Service pattern. Meters POST readings to it,
+> MongoDB, that's the Database-per-Service pattern. Meters POST readings to it,
 > and it serves a twenty-four hour summary back out using a MongoDB aggregation
 > pipeline.
 >
 > **The price service** is Python and FastAPI. It's an HTTP client of somebody
 > else's REST API and an HTTP server of its own at the same time. It caches for
-> fifteen minutes so we're not hammering a free public API, and — this bit
-> matters — if that API is down, it serves a stale cache, and if it has no cache
+> fifteen minutes so we're not hammering a free public API, and, this bit
+> matters, if that API is down, it serves a stale cache, and if it has no cache
 > it serves a modelled price curve, clearly labelled. The hospital never sees a
 > blank dashboard because of somebody else's outage.
 >
@@ -122,7 +121,7 @@ diagram — or just talk over the dashboard.
 
 ---
 
-## 4:00 – 5:15 — The Kubernetes YAML (VS Code on screen)
+## 4:00-5:15: The Kubernetes YAML (VS Code on screen)
 
 Open `k8s/03-ingest.yaml`.
 
@@ -130,14 +129,14 @@ Open `k8s/03-ingest.yaml`.
 >
 > **[scroll through 03-ingest.yaml]** This is a typical service. A ClusterIP
 > Service, which gives it a stable DNS name and load balances across whatever
-> replicas exist — note it's ClusterIP, not NodePort, so this is unreachable from
+> replicas exist. Note it's ClusterIP, not NodePort, so this is unreachable from
 > outside the cluster entirely.
 >
 > Then the Deployment. Two replicas to start. A rolling update with
 > `maxUnavailable: 0`, so releases are zero-downtime.
 >
 > **[point at env]** Configuration comes from a ConfigMap and the database
-> password from a Secret — nothing is hard-coded, so the same image runs in every
+> password from a Secret, nothing is hard-coded, so the same image runs in every
 > environment.
 >
 > **[point at probes]** Three probes. Startup, liveness and readiness. Liveness
@@ -149,7 +148,7 @@ Open `k8s/03-ingest.yaml`.
 
 Open `k8s/02-mongodb.yaml`.
 
-> "MongoDB is different — it's a StatefulSet, not a Deployment, because a database
+> "MongoDB is different, it's a StatefulSet, not a Deployment, because a database
 > needs a stable identity and needs the *same disk* back every time. That's this
 > `volumeClaimTemplates` block at the bottom: a two-gigabyte PersistentVolumeClaim
 > that is not deleted when the pod is."
@@ -159,7 +158,7 @@ Open `k8s/08-network-policy.yaml`.
 > "And this file is the one I'm most pleased with. By default in Kubernetes every
 > pod can talk to every other pod. This starts with a default-deny rule and then
 > opens only the ten conversations the system actually needs. The important one is
-> here — only pods labelled `app: ingest` may open a connection to MongoDB. Even
+> here, only pods labelled `app: ingest` may open a connection to MongoDB. Even
 > if an attacker compromised the optimizer and stole the database password, the
 > network would refuse the connection.
 >
@@ -169,7 +168,7 @@ Open `k8s/08-network-policy.yaml`.
 
 ---
 
-## 5:15 – 6:45 — Running it live
+## 5:15-6:45: Running it live
 
 Switch to PowerShell.
 
@@ -192,7 +191,7 @@ kubectl logs -l app=optimizer -n mediwatt --tail=15
 kubectl logs -l app=price -n mediwatt --tail=15
 ```
 
-> "And here's the price service fetching from the live API — you can see it
+> "And here's the price service fetching from the live API. You can see it
 > reporting how many records it pulled and reducing them to twenty-four hours."
 
 Now the scaling demo:
@@ -204,19 +203,19 @@ powershell -ExecutionPolicy Bypass -File .\scripts\3-demo-scaling.ps1
 > "Now the scaling requirement. I'm scaling only the optimizer, from two replicas
 > to six.
 >
-> **[after it scales]** And look — the optimizer went from two to six, and the
+> **[after it scales]** And look, the optimizer went from two to six, and the
 > gateway, ingest and price deployments did not move at all. Each service has its
 > own HorizontalPodAutoscaler with its own metric and its own ceiling. They're
 > genuinely independent.
 >
 > **[during the 20 requests]** And now I'm sending twenty requests through the
 > gateway, and printing which optimizer pod computed each one. You can see
-> Kubernetes spreading them across the replicas — and I didn't change a single
+> Kubernetes spreading them across the replicas, and I didn't change a single
 > line of application code to make that happen."
 
 ---
 
-## 6:45 – 7:30 — Persistent storage
+## 6:45-7:30: Persistent storage
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\scripts\4-demo-persistence.ps1
@@ -227,7 +226,7 @@ powershell -ExecutionPolicy Bypass -File .\scripts\4-demo-persistence.ps1
 > **[as it runs]** It's recording how much data is stored, and now it deletes the
 > entire MongoDB pod. Gone.
 >
-> **[as it recreates]** Kubernetes recreates it immediately — that's the
+> **[as it recreates]** Kubernetes recreates it immediately, that's the
 > StatefulSet doing its job. And critically, the PersistentVolumeClaim was not
 > deleted, so the new pod attaches to the same disk.
 >
@@ -235,19 +234,19 @@ powershell -ExecutionPolicy Bypass -File .\scripts\4-demo-persistence.ps1
 
 ---
 
-## 7:30 – 8:00 — Wrap up
+## 7:30-8:00: Wrap up
 
 > "So to summarise: four independently scalable microservices in two languages,
 > each with its own REST API, a MongoDB database on persistent storage, all
 > deployed on Kubernetes, all four images on Docker Hub, and accessible from a
 > normal web browser.
 >
-> Two honest limitations. There's no authentication yet — anyone who can reach
-> the port can see the dashboard — and all internal traffic is plain HTTP. Both
+> Two honest limitations. There's no authentication yet, anyone who can reach
+> the port can see the dashboard, and all internal traffic is plain HTTP. Both
 > are covered in the security section of my report, along with the fixes: OIDC
 > at the ingress and a service mesh for mutual TLS.
 >
-> And on scale — for one hospital this honestly doesn't need to scale. The
+> And on scale, for one hospital this honestly doesn't need to scale. The
 > scaling story is real when you run it as a SaaS product for a hospital group:
 > sixty sites, hundreds of meters each, re-planning every fifteen minutes. That's
 > the scenario the architecture is designed for.
@@ -257,7 +256,7 @@ powershell -ExecutionPolicy Bypass -File .\scripts\4-demo-persistence.ps1
 
 ---
 
-## Checklist — did you show everything the assignment asks for?
+## Checklist: did you show everything the assignment asks for?
 
 - [ ] What the project is about
 - [ ] What each separate microservice does

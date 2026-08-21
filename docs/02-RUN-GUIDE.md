@@ -1,4 +1,4 @@
-# How to run MediWatt — step by step
+# How to run MediWatt: step by step
 
 Written for someone who has never done this before. Follow it in order and do
 not skip a step. If something goes wrong, the fixes are at the bottom.
@@ -11,14 +11,14 @@ not skip a step. If something goes wrong, the fixes are at the bottom.
 
 | # | Thing | How to check you have it |
 |---|---|---|
-| 1 | **Docker Desktop**, installed and running | Look at the bottom-right of your screen for the whale icon. Open the app — it should say "Engine running". |
+| 1 | **Docker Desktop**, installed and running | Look at the bottom-right of your screen for the whale icon. Open the app and it should say "Engine running". |
 | 2 | **A Docker Hub account** (free) | Go to https://hub.docker.com and sign up. **Write down your username in lowercase.** You will type it several times. |
-| 3 | **A GitHub account** (free) | https://github.com — you need it for the repository link you must submit. |
+| 3 | **A GitHub account** (free) | https://github.com. You need it for the repository link you must submit. |
 | 4 | **The MediWatt folder** on your Desktop | It should be called `mediwatt`. |
 
 ---
 
-## Step 1 — Turn on Kubernetes inside Docker Desktop
+## Step 1: Turn on Kubernetes inside Docker Desktop
 
 Kubernetes is not switched on by default. This is the step people most often
 miss.
@@ -28,7 +28,7 @@ miss.
 3. In the left menu, click **Kubernetes**.
 4. Tick the box **Enable Kubernetes**.
 5. Click **Apply & Restart**.
-6. **Wait.** The first time, this downloads a lot and can take 5–10 minutes.
+6. **Wait.** The first time, this downloads a lot and can take 5-10 minutes.
    You are finished when the Kubernetes indicator at the bottom-left of Docker
    Desktop turns **green** and says "Kubernetes running".
 
@@ -36,7 +36,7 @@ miss.
 
 ---
 
-## Step 2 — Open PowerShell in the project folder
+## Step 2: Open PowerShell in the project folder
 
 1. Open the `mediwatt` folder on your Desktop in File Explorer.
 2. Click once in the **address bar** at the top (where it shows the folder path).
@@ -58,12 +58,11 @@ NAME             STATUS   ROLES           AGE   VERSION
 docker-desktop   Ready    control-plane   5m    v1.30.2
 ```
 
-If it says `Ready`, you are good. If it says it cannot connect, go back to
-Step 1 — Kubernetes is not actually running yet.
+If it says `Ready`, you are good. If it says it cannot connect, go back to Step 1. Kubernetes is not actually running yet.
 
 ---
 
-## Step 3 — Build the images and put them on Docker Hub
+## Step 3: Build the images and put them on Docker Hub
 
 This turns your four services into container images and publishes them so that
 Kubernetes can download them.
@@ -82,8 +81,8 @@ The script will:
 1. Check Docker is running.
 2. **Ask you for your Docker Hub username.** Type it in lowercase and press Enter.
 3. **Ask you to log in.** Type your Docker Hub password. **You will not see the
-   characters appear as you type — that is normal.** Press Enter.
-4. Build and push all four images. This takes **5–10 minutes** the first time
+   characters appear as you type. That is normal.** Press Enter.
+4. Build and push all four images. This takes **5-10 minutes** the first time
    because it downloads the Node.js and Python base images.
 5. Automatically update the Kubernetes files to point at *your* images.
 
@@ -95,7 +94,7 @@ new repositories: `mediwatt-ingest`, `mediwatt-price`, `mediwatt-optimizer`,
 
 ---
 
-## Step 4 — Deploy to Kubernetes
+## Step 4: Deploy to Kubernetes
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\scripts\2-deploy.ps1
@@ -105,7 +104,7 @@ This one creates all 30 Kubernetes objects, waits for the database to start,
 waits for each service to be healthy, loads a day of demo meter data, and then
 opens your browser automatically.
 
-It takes **2–4 minutes**. MongoDB is the slow part.
+It takes **2-4 minutes**. MongoDB is the slow part.
 
 You are finished when your browser opens at **http://localhost:30080** and you
 see the MediWatt dashboard with numbers in it.
@@ -114,7 +113,7 @@ see the MediWatt dashboard with numbers in it.
 
 ---
 
-## Step 5 — Look at what you built
+## Step 5: Look at what you built
 
 Type each of these and look at what comes back. You will need to show some of
 these in your video.
@@ -124,7 +123,7 @@ these in your video.
 kubectl get pods -n mediwatt
 ```
 
-**Everything at once — deployments, services, pods, autoscalers:**
+**Everything at once (deployments, services, pods, autoscalers):**
 ```powershell
 kubectl get all -n mediwatt
 ```
@@ -139,7 +138,7 @@ kubectl get pvc -n mediwatt
 kubectl logs -l app=optimizer -n mediwatt --tail=30 -f
 ```
 
-**Live logs from the price service** — this shows it calling the real
+**Live logs from the price service**: this shows it calling the real
 electricity price API:
 ```powershell
 kubectl logs -l app=price -n mediwatt --tail=30
@@ -152,7 +151,7 @@ curl.exe http://localhost:30080/api/prices?area=SE4
 
 ---
 
-## Step 6 — Run the two demonstrations
+## Step 6: Run the two demonstrations
 
 These are what you record for your video.
 
@@ -173,14 +172,14 @@ This deletes the whole database pod on camera and shows the data coming back.
 
 ---
 
-## Step 7 — Put the code on GitHub
+## Step 7: Put the code on GitHub
 
 You must submit a link to a repository.
 
 1. Go to https://github.com/new
 2. Repository name: `mediwatt-hospital-energy`
 3. Choose **Public** (your examiner has to be able to see it).
-4. **Do not** tick "Add a README file" — you already have one.
+4. **Do not** tick "Add a README file". You already have one.
 5. Click **Create repository**.
 
 Then, back in PowerShell in your `mediwatt` folder, type these one at a time:
@@ -196,14 +195,14 @@ git push -u origin main
 
 Replace `YOUR-GITHUB-USERNAME` with your actual GitHub username.
 
-If it asks you to log in, a browser window will open — sign in there.
+If it asks you to log in, a browser window will open. Sign in there.
 
 **Check it worked:** open your repository page in a browser. You should see the
 `services`, `k8s`, `scripts` and `docs` folders.
 
 ---
 
-## Step 8 — Record the video
+## Step 8: Record the video
 
 Use the script in `docs/03-VIDEO-SCRIPT.md`. It is written out shot by shot with
 what to say and what to have on screen.
@@ -240,7 +239,7 @@ Docker Desktop is not running. Open it from the Start menu and wait for
 
 Kubernetes cannot download your images. Two usual causes:
 
-1. Step 3 did not finish — check https://hub.docker.com for your four repositories.
+1. Step 3 did not finish. Check https://hub.docker.com for your four repositories.
 2. Your Docker Hub repositories are **private**. Open each one on Docker Hub →
    Settings → make it **Public**.
 
@@ -259,7 +258,7 @@ kubectl logs -l app=ingest -n mediwatt --tail=50
 
 ## MongoDB never becomes ready
 
-Give it more time — the first start can take 3 minutes. If it still fails:
+Give it more time. The first start can take 3 minutes. If it still fails:
 ```powershell
 kubectl describe pod mongodb-0 -n mediwatt
 ```
@@ -274,7 +273,7 @@ Press the **Load demo day** button on the dashboard. That is all it needs.
 ## The dashboard says "price feed: modelled fallback"
 
 The price service could not reach the internet from inside the cluster. The
-application still works — it falls back to a modelled price curve on purpose.
+application still works. It falls back to a modelled price curve on purpose.
 Check your internet connection and press **Refresh**.
 
 **This is actually a good thing to point out in your video**: it is a designed
@@ -282,7 +281,7 @@ resilience feature, not a failure.
 
 ## `kubectl get hpa` shows `<unknown>` in the TARGETS column
 
-`metrics-server` is not installed — Docker Desktop does not include it. Install it:
+`metrics-server` is not installed. Docker Desktop does not include it. Install it:
 
 ```powershell
 kubectl apply -f https://github.com/kubernetes-sigs/metrics-server/releases/latest/download/components.yaml

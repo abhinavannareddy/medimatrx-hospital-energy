@@ -72,7 +72,7 @@ spec:
                 topologyKey: kubernetes.io/hostname
       containers:
         - name: gateway
-          image: abhinavannareddy/mediwatt-gateway:1.0.0
+          image: abhinavannareddy/mediwatt-gateway:1.0.1
           imagePullPolicy: IfNotPresent
           ports:
             - name: http

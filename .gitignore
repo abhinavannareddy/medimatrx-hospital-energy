@@ -6,3 +6,6 @@ __pycache__/
 .DS_Store
 .venv/
 venv/
+
+# Personal working notes, not part of the submitted repository
+docs/03-VIDEO-SCRIPT.md
