@@ -20,7 +20,7 @@ function Pause-Demo($message) {
 
 Write-Host ""
 Write-Host "======================================================" -ForegroundColor Cyan
-Write-Host "  MediWatt - persistent storage demonstration" -ForegroundColor Cyan
+Write-Host "  MediMatrx - persistent storage demonstration" -ForegroundColor Cyan
 Write-Host "======================================================" -ForegroundColor Cyan
 
 Write-Host ""
@@ -30,23 +30,23 @@ Write-Host ("  Total consumption stored: {0:N1} kWh across {1} zones" -f $before
 
 Write-Host ""
 Write-Host "The disk that holds it:" -ForegroundColor Cyan
-kubectl get pvc -n mediwatt
+kubectl get pvc -n medimatrx
 
 Pause-Demo "Now I DELETE the entire database pod. In a moment it will be gone."
 
-kubectl delete pod mongodb-0 -n mediwatt
+kubectl delete pod mongodb-0 -n medimatrx
 Write-Host ""
 Write-Host "Pod deleted. Watch Kubernetes recreate it..." -ForegroundColor Cyan
 Start-Sleep -Seconds 4
-kubectl get pods -n mediwatt -l app=mongodb
+kubectl get pods -n medimatrx -l app=mongodb
 
 Write-Host ""
 Write-Host "Waiting for the replacement to be ready..." -ForegroundColor Cyan
-kubectl wait --for=condition=ready pod -l app=mongodb -n mediwatt --timeout=240s
+kubectl wait --for=condition=ready pod -l app=mongodb -n medimatrx --timeout=240s
 
 Write-Host ""
 Write-Host "The PersistentVolumeClaim was NOT deleted - same disk, new pod:" -ForegroundColor Cyan
-kubectl get pvc -n mediwatt
+kubectl get pvc -n medimatrx
 
 Pause-Demo "Now the moment of truth: is the data still there?"
 

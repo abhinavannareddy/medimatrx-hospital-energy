@@ -1,7 +1,7 @@
 {
-  "name": "mediwatt-ingest-service",
+  "name": "medimatrx-ingest-service",
   "version": "1.0.0",
-  "description": "MediWatt Ingest Service - receives and stores hospital energy meter readings",
+  "description": "MediMatrx Ingest Service - receives and stores hospital energy meter readings",
   "main": "server.js",
   "scripts": {
     "start": "node server.js"

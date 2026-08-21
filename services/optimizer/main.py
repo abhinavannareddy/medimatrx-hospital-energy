@@ -1,6 +1,6 @@
 """
 ===========================================================================
- MediWatt - OPTIMIZER SERVICE
+ MediMatrx - OPTIMIZER SERVICE
 ---------------------------------------------------------------------------
  Job in one sentence:
     "I am the brain. I ask the Ingest Service what the hospital used, I ask
@@ -82,7 +82,7 @@ CO2_PEAK_HOUR = 96.0
 DEMAND_CHARGE_SEK_PER_KW_MONTH = 68.0
 
 app = FastAPI(
-    title="MediWatt Optimizer Service",
+    title="MediMatrx Optimizer Service",
     description="Computes load-shifting recommendations and cost savings.",
     version="1.0.0",
 )

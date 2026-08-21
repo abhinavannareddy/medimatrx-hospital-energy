@@ -1,4 +1,4 @@
-# MediWatt: Hospital Energy Optimisation Platform
+# MediMatrx: Hospital Energy Optimisation Platform
 
 **Cloud Computing assignment report**
 Blekinge Institute of Technology
@@ -7,7 +7,7 @@ Blekinge Institute of Technology
 
 ## 1. What the software does
 
-MediWatt is a microservice application that helps a hospital spend less money on
+MediMatrx is a microservice application that helps a hospital spend less money on
 electricity **without ever touching the equipment that keeps patients alive**.
 
 Hospitals are unusual electricity customers. They run 24 hours a day, they cannot
@@ -16,7 +16,7 @@ switch off, and a large regional hospital in Sweden spends in the region of
 
 - **Clinical load**: intensive care, operating theatres, imaging, wards. This is
   life-safety equipment. It runs when the patient needs it and at no other time.
-  It is not negotiable and MediWatt never touches it.
+  It is not negotiable and MediMatrx never touches it.
 - **Deferrable load**: the laundry, the sterilisation department, the kitchen's
   bulk cooking and dishwashing, and the HVAC plant's ability to pre-cool the
   building using its own thermal mass. This work still has to happen every day,
@@ -28,7 +28,7 @@ what the most expensive hour costs. A hospital that does its laundry at 18:00
 because that is when it has always done its laundry is paying roughly three times
 what it needs to.
 
-MediWatt does four things:
+MediMatrx does four things:
 
 1. **Collects** electricity meter readings from nine metered zones of the
    hospital and stores them.
@@ -59,7 +59,7 @@ management system or by IoT meter gateways; the rest of the system is unchanged.
 
 For a single hospital this application does not truly need to scale. One pod of
 each service would carry the load comfortably. The scaling story becomes real
-when MediWatt is operated as a SaaS product for a hospital *group*:
+when MediMatrx is operated as a SaaS product for a hospital *group*:
 
 - **Region Blekinge alone** has several hospitals and health centres.
 - A national or Nordic operator would carry **hundreds of sites**, each with
@@ -129,10 +129,10 @@ system and the microservices that implement them. This is that mapping.
 
 | # | Logical component | Implemented by | Language / framework | Owns state? | Docker Hub image |
 |---|---|---|---|---|---|
-| C1 | Presentation & entry point | **API Gateway** (`gateway`) | Node.js 20 / Express | No | `mediwatt-gateway:1.0.0` |
-| C2 | Metering data management | **Ingest Service** (`ingest`) | Node.js 20 / Express | **Yes, owns MongoDB** | `mediwatt-ingest:1.0.0` |
-| C3 | Market price acquisition | **Price Service** (`price`) | Python 3.12 / FastAPI | In-memory cache only | `mediwatt-price:1.0.0` |
-| C4 | Optimisation & analytics | **Optimizer Service** (`optimizer`) | Python 3.12 / FastAPI | No, fully stateless | `mediwatt-optimizer:1.0.0` |
+| C1 | Presentation & entry point | **API Gateway** (`gateway`) | Node.js 20 / Express | No | `medimatrx-gateway:1.0.0` |
+| C2 | Metering data management | **Ingest Service** (`ingest`) | Node.js 20 / Express | **Yes, owns MongoDB** | `medimatrx-ingest:1.0.0` |
+| C3 | Market price acquisition | **Price Service** (`price`) | Python 3.12 / FastAPI | In-memory cache only | `medimatrx-price:1.0.0` |
+| C4 | Optimisation & analytics | **Optimizer Service** (`optimizer`) | Python 3.12 / FastAPI | No, fully stateless | `medimatrx-optimizer:1.0.0` |
 | C5 | Persistence | **MongoDB** | MongoDB 7.0 | Yes | `mongo:7.0` (official) |
 
 #### C1: API Gateway
@@ -245,7 +245,7 @@ When the estates manager opens the dashboard:
 
 | File | Objects | Purpose |
 |---|---|---|
-| `00-namespace.yaml` | Namespace | An isolation boundary; `kubectl delete namespace mediwatt` removes everything. |
+| `00-namespace.yaml` | Namespace | An isolation boundary; `kubectl delete namespace medimatrx` removes everything. |
 | `01-config-and-secrets.yaml` | ConfigMap, Secret | All configuration and credentials, outside the images. |
 | `02-mongodb.yaml` | headless Service, StatefulSet + volumeClaimTemplate | Stable identity + persistent 2 GiB disk. |
 | `03-ingest.yaml` | ClusterIP Service, Deployment | 2 replicas, internal only. |
@@ -496,7 +496,7 @@ code, on the server, where a user interface cannot bypass it.
 
 ### 6.3 The most important thing on this list
 
-If MediWatt were taken to a real hospital tomorrow, **authentication and TLS are
+If MediMatrx were taken to a real hospital tomorrow, **authentication and TLS are
 the two gaps that must be closed before anything else**. Everything else on that
 table is defence in depth; those two are the front door standing open.
 
@@ -504,7 +504,7 @@ table is defence in depth; those two are the front door standing open.
 
 ## 7. Conclusion
 
-MediWatt demonstrates all of the assignment's technical requirements: four
+MediMatrx demonstrates all of the assignment's technical requirements: four
 independently scalable microservices in two languages, each with its own REST
 API, a MongoDB database on persistent storage, external access through a browser,
 images published to Docker Hub, and a complete Kubernetes deployment, while

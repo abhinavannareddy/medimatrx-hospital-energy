@@ -1,5 +1,5 @@
 // ===========================================================================
-//  MediWatt - INGEST SERVICE
+//  MediMatrx - INGEST SERVICE
 // ---------------------------------------------------------------------------
 //  Job in one sentence:
 //     "I am the only service allowed to talk to the database. I take energy
@@ -29,10 +29,10 @@ const POD = process.env.POD_NAME || os.hostname();
 // The username, password and host all come from environment variables.
 // They are NEVER written in the source code. In Kubernetes they arrive
 // from a Secret and a ConfigMap.
-const MONGO_USER = process.env.MONGO_USER || 'mediwatt';
+const MONGO_USER = process.env.MONGO_USER || 'medimatrx';
 const MONGO_PASS = process.env.MONGO_PASSWORD || 'devpassword';
 const MONGO_HOST = process.env.MONGO_HOST || 'localhost:27017';
-const MONGO_DB   = process.env.MONGO_DB || 'mediwatt';
+const MONGO_DB   = process.env.MONGO_DB || 'medimatrx';
 
 const MONGO_URI = `mongodb://${encodeURIComponent(MONGO_USER)}:${encodeURIComponent(MONGO_PASS)}@${MONGO_HOST}/?authSource=admin`;
 

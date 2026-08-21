@@ -1,5 +1,5 @@
 # ===========================================================================
-#  Remove MediWatt from the cluster.
+#  Remove MediMatrx from the cluster.
 #
 #  Deleting the namespace removes every deployment, service, pod, config,
 #  secret, autoscaler and network policy in one command - that is one of the
@@ -12,7 +12,7 @@
 # ===========================================================================
 
 Write-Host ""
-Write-Host "This will delete the entire 'mediwatt' namespace and all its data." -ForegroundColor Yellow
+Write-Host "This will delete the entire 'medimatrx' namespace and all its data." -ForegroundColor Yellow
 $confirm = Read-Host "Type YES to continue"
 
 if ($confirm -ne "YES") {
@@ -20,8 +20,8 @@ if ($confirm -ne "YES") {
     exit 0
 }
 
-kubectl delete namespace mediwatt
+kubectl delete namespace medimatrx
 Write-Host ""
-Write-Host "MediWatt removed." -ForegroundColor Green
+Write-Host "MediMatrx removed." -ForegroundColor Green
 Write-Host "Your container images are still on Docker Hub." -ForegroundColor DarkGray
 Write-Host ""

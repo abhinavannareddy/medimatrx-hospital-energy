@@ -9,7 +9,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: price-service
-  namespace: mediwatt
+  namespace: medimatrx
   labels:
     app: price
 spec:
@@ -26,7 +26,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: price
-  namespace: mediwatt
+  namespace: medimatrx
   labels:
     app: price
     app.kubernetes.io/component: backend
@@ -61,7 +61,7 @@ spec:
                 topologyKey: kubernetes.io/hostname
       containers:
         - name: price
-          image: abhinavannareddy/mediwatt-price:1.0.0
+          image: abhinavannareddy/medimatrx-price:1.0.0
           imagePullPolicy: IfNotPresent
           ports:
             - name: http
@@ -73,7 +73,7 @@ spec:
                   fieldPath: metadata.name
           envFrom:
             - configMapRef:
-                name: mediwatt-config
+                name: medimatrx-config
           resources:
             requests:
               cpu: "50m"

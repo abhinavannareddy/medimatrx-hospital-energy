@@ -1,4 +1,4 @@
-# How to run MediWatt: step by step
+# How to run MediMatrx: step by step
 
 Written for someone who has never done this before. Follow it in order and do
 not skip a step. If something goes wrong, the fixes are at the bottom.
@@ -14,7 +14,7 @@ not skip a step. If something goes wrong, the fixes are at the bottom.
 | 1 | **Docker Desktop**, installed and running | Look at the bottom-right of your screen for the whale icon. Open the app and it should say "Engine running". |
 | 2 | **A Docker Hub account** (free) | Go to https://hub.docker.com and sign up. **Write down your username in lowercase.** You will type it several times. |
 | 3 | **A GitHub account** (free) | https://github.com. You need it for the repository link you must submit. |
-| 4 | **The MediWatt folder** on your Desktop | It should be called `mediwatt`. |
+| 4 | **The MediMatrx folder** on your Desktop | It should be called `medimatrx`. |
 
 ---
 
@@ -38,7 +38,7 @@ miss.
 
 ## Step 2: Open PowerShell in the project folder
 
-1. Open the `mediwatt` folder on your Desktop in File Explorer.
+1. Open the `medimatrx` folder on your Desktop in File Explorer.
 2. Click once in the **address bar** at the top (where it shows the folder path).
 3. Type `powershell` and press **Enter**.
 
@@ -89,8 +89,8 @@ The script will:
 You are finished when you see **"DONE. All four images are on Docker Hub."**
 
 **Check it worked:** go to https://hub.docker.com and log in. You should see four
-new repositories: `mediwatt-ingest`, `mediwatt-price`, `mediwatt-optimizer`,
-`mediwatt-gateway`.
+new repositories: `medimatrx-ingest`, `medimatrx-price`, `medimatrx-optimizer`,
+`medimatrx-gateway`.
 
 ---
 
@@ -107,7 +107,7 @@ opens your browser automatically.
 It takes **2-4 minutes**. MongoDB is the slow part.
 
 You are finished when your browser opens at **http://localhost:30080** and you
-see the MediWatt dashboard with numbers in it.
+see the MediMatrx dashboard with numbers in it.
 
 🎉 **That is it. Your application is running on Kubernetes.**
 
@@ -120,28 +120,28 @@ these in your video.
 
 **All the running pods:**
 ```powershell
-kubectl get pods -n mediwatt
+kubectl get pods -n medimatrx
 ```
 
 **Everything at once (deployments, services, pods, autoscalers):**
 ```powershell
-kubectl get all -n mediwatt
+kubectl get all -n medimatrx
 ```
 
 **The persistent disk:**
 ```powershell
-kubectl get pvc -n mediwatt
+kubectl get pvc -n medimatrx
 ```
 
 **Live logs from the optimizer** (press `Ctrl+C` to stop):
 ```powershell
-kubectl logs -l app=optimizer -n mediwatt --tail=30 -f
+kubectl logs -l app=optimizer -n medimatrx --tail=30 -f
 ```
 
 **Live logs from the price service**: this shows it calling the real
 electricity price API:
 ```powershell
-kubectl logs -l app=price -n mediwatt --tail=30
+kubectl logs -l app=price -n medimatrx --tail=30
 ```
 
 **Call the API directly, without the browser:**
@@ -177,19 +177,19 @@ This deletes the whole database pod on camera and shows the data coming back.
 You must submit a link to a repository.
 
 1. Go to https://github.com/new
-2. Repository name: `mediwatt-hospital-energy`
+2. Repository name: `medimatrx-hospital-energy`
 3. Choose **Public** (your examiner has to be able to see it).
 4. **Do not** tick "Add a README file". You already have one.
 5. Click **Create repository**.
 
-Then, back in PowerShell in your `mediwatt` folder, type these one at a time:
+Then, back in PowerShell in your `medimatrx` folder, type these one at a time:
 
 ```powershell
 git init
 git add .
-git commit -m "MediWatt: hospital energy optimisation on Kubernetes"
+git commit -m "MediMatrx: hospital energy optimisation on Kubernetes"
 git branch -M main
-git remote add origin https://github.com/YOUR-GITHUB-USERNAME/mediwatt-hospital-energy.git
+git remote add origin https://github.com/YOUR-GITHUB-USERNAME/medimatrx-hospital-energy.git
 git push -u origin main
 ```
 
@@ -245,7 +245,7 @@ Kubernetes cannot download your images. Two usual causes:
 
 See exactly what is wrong with:
 ```powershell
-kubectl describe pod -l app=gateway -n mediwatt
+kubectl describe pod -l app=gateway -n medimatrx
 ```
 Read the `Events` section at the bottom.
 
@@ -253,14 +253,14 @@ Read the `Events` section at the bottom.
 
 Something inside the container is failing. Look at what it says:
 ```powershell
-kubectl logs -l app=ingest -n mediwatt --tail=50
+kubectl logs -l app=ingest -n medimatrx --tail=50
 ```
 
 ## MongoDB never becomes ready
 
 Give it more time. The first start can take 3 minutes. If it still fails:
 ```powershell
-kubectl describe pod mongodb-0 -n mediwatt
+kubectl describe pod mongodb-0 -n medimatrx
 ```
 If the message mentions the PersistentVolumeClaim being unbound, your cluster has
 no default storage class. On Docker Desktop this should not happen; if it does,
@@ -288,7 +288,7 @@ kubectl apply -f https://github.com/kubernetes-sigs/metrics-server/releases/late
 kubectl patch deployment metrics-server -n kube-system --type=json -p '[{\"op\":\"add\",\"path\":\"/spec/template/spec/containers/0/args/-\",\"value\":\"--kubelet-insecure-tls\"}]'
 ```
 
-Wait a minute, then `kubectl get hpa -n mediwatt` again.
+Wait a minute, then `kubectl get hpa -n medimatrx` again.
 
 Manual scaling (`kubectl scale`) works perfectly well without it, so this is not
 required for the demo.
@@ -296,7 +296,7 @@ required for the demo.
 ## Everything is broken and I want to start over
 
 ```powershell
-kubectl delete namespace mediwatt
+kubectl delete namespace medimatrx
 ```
 Wait for it to finish, then run `.\scripts\2-deploy.ps1` again.
 

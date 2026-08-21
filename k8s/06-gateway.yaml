@@ -1,5 +1,5 @@
 # ===========================================================================
-#  API GATEWAY - the only part of MediWatt reachable from outside
+#  API GATEWAY - the only part of MediMatrx reachable from outside
 #
 #  This is what satisfies "the application must be accessible from the
 #  outside of Kubernetes (e.g. via a web browser)".
@@ -19,7 +19,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: gateway-service
-  namespace: mediwatt
+  namespace: medimatrx
   labels:
     app: gateway
 spec:
@@ -37,7 +37,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: gateway
-  namespace: mediwatt
+  namespace: medimatrx
   labels:
     app: gateway
     app.kubernetes.io/component: frontend
@@ -72,7 +72,7 @@ spec:
                 topologyKey: kubernetes.io/hostname
       containers:
         - name: gateway
-          image: abhinavannareddy/mediwatt-gateway:1.0.1
+          image: abhinavannareddy/medimatrx-gateway:1.0.0
           imagePullPolicy: IfNotPresent
           ports:
             - name: http
@@ -84,7 +84,7 @@ spec:
                   fieldPath: metadata.name
           envFrom:
             - configMapRef:
-                name: mediwatt-config
+                name: medimatrx-config
           resources:
             requests:
               cpu: "50m"
@@ -131,14 +131,14 @@ spec:
 #
 #    kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/main/deploy/static/provider/cloud/deploy.yaml
 #
-#  Then uncomment everything below and browse to http://mediwatt.localdev.me
+#  Then uncomment everything below and browse to http://medimatrx.localdev.me
 # ---------------------------------------------------------------------------
 # ---
 # apiVersion: networking.k8s.io/v1
 # kind: Ingress
 # metadata:
-#   name: mediwatt-ingress
-#   namespace: mediwatt
+#   name: medimatrx-ingress
+#   namespace: medimatrx
 #   annotations:
 #     nginx.ingress.kubernetes.io/ssl-redirect: "false"
 #     # Rate limiting at the edge, where it belongs in production:
@@ -146,7 +146,7 @@ spec:
 # spec:
 #   ingressClassName: nginx
 #   rules:
-#     - host: mediwatt.localdev.me
+#     - host: medimatrx.localdev.me
 #       http:
 #         paths:
 #           - path: /
@@ -158,5 +158,5 @@ spec:
 #                   number: 80
 #   # For real TLS, add:
 #   # tls:
-#   #   - hosts: [mediwatt.example.com]
-#   #     secretName: mediwatt-tls
+#   #   - hosts: [medimatrx.example.com]
+#   #     secretName: medimatrx-tls

@@ -21,7 +21,7 @@ Set-Location $root
 
 Write-Host ""
 Write-Host "======================================================" -ForegroundColor Cyan
-Write-Host "  MediWatt - Step 1: build and push container images" -ForegroundColor Cyan
+Write-Host "  MediMatrx - Step 1: build and push container images" -ForegroundColor Cyan
 Write-Host "======================================================" -ForegroundColor Cyan
 Write-Host ""
 
@@ -46,10 +46,10 @@ if ([string]::IsNullOrWhiteSpace($user)) {
 $user = $user.Trim().ToLower()
 Write-Host ""
 Write-Host "Images will be published as:" -ForegroundColor Cyan
-Write-Host "   $user/mediwatt-ingest:1.0.0"
-Write-Host "   $user/mediwatt-price:1.0.0"
-Write-Host "   $user/mediwatt-optimizer:1.0.0"
-Write-Host "   $user/mediwatt-gateway:1.0.0"
+Write-Host "   $user/medimatrx-ingest:1.0.0"
+Write-Host "   $user/medimatrx-price:1.0.0"
+Write-Host "   $user/medimatrx-optimizer:1.0.0"
+Write-Host "   $user/medimatrx-gateway:1.0.0"
 Write-Host ""
 
 # --- Log in ---------------------------------------------------------------
@@ -67,7 +67,7 @@ Write-Host ""
 $services = @("ingest", "price", "optimizer", "gateway")
 
 foreach ($svc in $services) {
-    $image = "$user/mediwatt-$svc" + ":1.0.0"
+    $image = "$user/medimatrx-$svc" + ":1.0.0"
 
     Write-Host "------------------------------------------------------" -ForegroundColor DarkGray
     Write-Host "Building $svc ..." -ForegroundColor Cyan

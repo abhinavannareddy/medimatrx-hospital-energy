@@ -3,12 +3,12 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>MediWatt: Hospital Energy Optimisation</title>
+<title>MediMatrx: Hospital Energy Optimisation</title>
 <!-- Inline favicon so the page makes zero external requests. -->
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%233987e5'/%3E%3Cpath d='M17.5 4 8 18h6l-1.5 10L23 14h-6z' fill='%23fff'/%3E%3C/svg%3E">
 <style>
   /* =====================================================================
-     MediWatt dashboard styling.
+     MediMatrx dashboard styling.
      Everything is in this one file on purpose: the page must work with no
      internet access and no external libraries, because it is served from
      inside a Kubernetes cluster that may be locked down.
@@ -26,7 +26,7 @@
     --border:       rgba(255,255,255,0.10);
 
     --baseline:     #d95926;   /* series 1: how the hospital runs today   */
-    --optimised:    #3987e5;   /* series 2: the MediWatt plan             */
+    --optimised:    #3987e5;   /* series 2: the MediMatrx plan             */
     --price:        #199e70;   /* price series, own panel                  */
 
     --good:         #0ca30c;
@@ -180,7 +180,7 @@
     <div class="brand">
       <div class="mark">M</div>
       <div>
-        <h1>MediWatt</h1>
+        <h1>MediMatrx</h1>
         <div class="sub">Energy optimisation platform · Blekinge Regional Hospital (demo site)</div>
       </div>
     </div>
@@ -209,7 +209,7 @@
 
   <!-- ============ CHARTS ============ -->
   <div class="card">
-    <h2>Site load, today vs the MediWatt plan</h2>
+    <h2>Site load, today vs the MediMatrx plan</h2>
     <p class="desc">
       Top panel: total hospital electricity use in each hour. Bottom panel: what a kilowatt-hour
       costs in that same hour. The plan moves deferrable work out of the expensive hours and into
@@ -217,7 +217,7 @@
     </p>
     <div class="legend">
       <span><i class="swatch" style="background:var(--baseline)"></i>Today (as operated)</span>
-      <span><i class="swatch" style="background:var(--optimised)"></i>MediWatt plan</span>
+      <span><i class="swatch" style="background:var(--optimised)"></i>MediMatrx plan</span>
       <span><i class="swatch line" style="background:var(--price)"></i>Electricity price</span>
     </div>
     <div class="chart-scroll"><svg id="chart" viewBox="0 0 980 430" role="img"
@@ -259,7 +259,7 @@
   </div>
 
   <footer>
-    MediWatt · microservice demonstrator for DV2626 Cloud Computing, Blekinge Institute of Technology<br>
+    MediMatrx · microservice demonstrator for DV2626 Cloud Computing, Blekinge Institute of Technology<br>
     Electricity prices from the public elprisetjustnu.se API. Meter data is simulated for the demo.
   </footer>
 </div>

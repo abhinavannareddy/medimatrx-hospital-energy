@@ -30,14 +30,14 @@
 #  certificate that metrics-server would otherwise reject.
 #
 #  Manual scaling always works, with or without metrics-server:
-#     kubectl scale deployment optimizer --replicas=6 -n mediwatt
+#     kubectl scale deployment optimizer --replicas=6 -n medimatrx
 # ===========================================================================
 ---
 apiVersion: autoscaling/v2
 kind: HorizontalPodAutoscaler
 metadata:
   name: gateway-hpa
-  namespace: mediwatt
+  namespace: medimatrx
 spec:
   scaleTargetRef:
     apiVersion: apps/v1
@@ -73,7 +73,7 @@ apiVersion: autoscaling/v2
 kind: HorizontalPodAutoscaler
 metadata:
   name: ingest-hpa
-  namespace: mediwatt
+  namespace: medimatrx
 spec:
   scaleTargetRef:
     apiVersion: apps/v1
@@ -106,7 +106,7 @@ apiVersion: autoscaling/v2
 kind: HorizontalPodAutoscaler
 metadata:
   name: price-hpa
-  namespace: mediwatt
+  namespace: medimatrx
 spec:
   scaleTargetRef:
     apiVersion: apps/v1
@@ -132,7 +132,7 @@ apiVersion: autoscaling/v2
 kind: HorizontalPodAutoscaler
 metadata:
   name: optimizer-hpa
-  namespace: mediwatt
+  namespace: medimatrx
 spec:
   scaleTargetRef:
     apiVersion: apps/v1
@@ -173,7 +173,7 @@ apiVersion: policy/v1
 kind: PodDisruptionBudget
 metadata:
   name: gateway-pdb
-  namespace: mediwatt
+  namespace: medimatrx
 spec:
   minAvailable: 1
   selector:
@@ -185,7 +185,7 @@ apiVersion: policy/v1
 kind: PodDisruptionBudget
 metadata:
   name: ingest-pdb
-  namespace: mediwatt
+  namespace: medimatrx
 spec:
   minAvailable: 1
   selector:
@@ -197,7 +197,7 @@ apiVersion: policy/v1
 kind: PodDisruptionBudget
 metadata:
   name: optimizer-pdb
-  namespace: mediwatt
+  namespace: medimatrx
 spec:
   minAvailable: 1
   selector:

@@ -15,7 +15,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: ingest-service
-  namespace: mediwatt
+  namespace: medimatrx
   labels:
     app: ingest
 spec:
@@ -32,7 +32,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: ingest
-  namespace: mediwatt
+  namespace: medimatrx
   labels:
     app: ingest
     app.kubernetes.io/component: backend
@@ -78,7 +78,7 @@ spec:
         - name: ingest
           # >>> REPLACE "DOCKERHUB_USER" WITH YOUR OWN DOCKER HUB USERNAME <<<
           # The script scripts/set-dockerhub-user.ps1 does this for you.
-          image: abhinavannareddy/mediwatt-ingest:1.0.0
+          image: abhinavannareddy/medimatrx-ingest:1.0.0
           imagePullPolicy: IfNotPresent
 
           ports:
@@ -94,9 +94,9 @@ spec:
                   fieldPath: metadata.name
           envFrom:
             - configMapRef:
-                name: mediwatt-config
+                name: medimatrx-config
             - secretRef:
-                name: mediwatt-db-credentials
+                name: medimatrx-db-credentials
 
           resources:
             requests:

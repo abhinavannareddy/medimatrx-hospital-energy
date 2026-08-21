@@ -1,5 +1,5 @@
 # ===========================================================================
-#  STEP 2 - Deploy MediWatt to Kubernetes.
+#  STEP 2 - Deploy MediMatrx to Kubernetes.
 #
 #  Run:
 #     powershell -ExecutionPolicy Bypass -File .\scripts\2-deploy.ps1
@@ -11,7 +11,7 @@ Set-Location $root
 
 Write-Host ""
 Write-Host "======================================================" -ForegroundColor Cyan
-Write-Host "  MediWatt - Step 2: deploy to Kubernetes" -ForegroundColor Cyan
+Write-Host "  MediMatrx - Step 2: deploy to Kubernetes" -ForegroundColor Cyan
 Write-Host "======================================================" -ForegroundColor Cyan
 Write-Host ""
 
@@ -51,21 +51,21 @@ Write-Host ""
 
 # --- Wait for the database, then the services ----------------------------
 Write-Host "Waiting for MongoDB to be ready (this is the slow one) ..." -ForegroundColor Cyan
-kubectl wait --for=condition=ready pod -l app=mongodb -n mediwatt --timeout=240s
+kubectl wait --for=condition=ready pod -l app=mongodb -n medimatrx --timeout=240s
 if ($LASTEXITCODE -ne 0) {
     Write-Host "MongoDB did not become ready in time." -ForegroundColor Red
     Write-Host "Look at what happened with:" -ForegroundColor Yellow
-    Write-Host "   kubectl describe pod mongodb-0 -n mediwatt" -ForegroundColor Yellow
+    Write-Host "   kubectl describe pod mongodb-0 -n medimatrx" -ForegroundColor Yellow
     exit 1
 }
 Write-Host "[ok] MongoDB is ready." -ForegroundColor Green
 
 foreach ($d in @("ingest", "price", "optimizer", "gateway")) {
     Write-Host "Waiting for $d ..." -ForegroundColor Cyan
-    kubectl rollout status deployment/$d -n mediwatt --timeout=240s
+    kubectl rollout status deployment/$d -n medimatrx --timeout=240s
     if ($LASTEXITCODE -ne 0) {
         Write-Host "Deployment $d did not come up." -ForegroundColor Red
-        Write-Host "   kubectl logs -l app=$d -n mediwatt --tail=50" -ForegroundColor Yellow
+        Write-Host "   kubectl logs -l app=$d -n medimatrx --tail=50" -ForegroundColor Yellow
         exit 1
     }
 }
@@ -83,10 +83,10 @@ try {
 }
 
 Write-Host ""
-kubectl get pods -n mediwatt
+kubectl get pods -n medimatrx
 Write-Host ""
 Write-Host "======================================================" -ForegroundColor Green
-Write-Host "  MediWatt is running." -ForegroundColor Green
+Write-Host "  MediMatrx is running." -ForegroundColor Green
 Write-Host "  Open:  http://localhost:30080" -ForegroundColor Green
 Write-Host "======================================================" -ForegroundColor Green
 Write-Host ""

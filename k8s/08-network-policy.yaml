@@ -32,7 +32,7 @@ apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
   name: default-deny-all
-  namespace: mediwatt
+  namespace: medimatrx
 spec:
   podSelector: {}            # {} means "every pod in this namespace"
   policyTypes:
@@ -48,7 +48,7 @@ apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
   name: allow-dns
-  namespace: mediwatt
+  namespace: medimatrx
 spec:
   podSelector: {}
   policyTypes: [Egress]
@@ -69,7 +69,7 @@ apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
   name: gateway-ingress
-  namespace: mediwatt
+  namespace: medimatrx
 spec:
   podSelector:
     matchLabels:
@@ -88,7 +88,7 @@ apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
   name: gateway-egress
-  namespace: mediwatt
+  namespace: medimatrx
 spec:
   podSelector:
     matchLabels:
@@ -116,7 +116,7 @@ apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
   name: ingest-ingress
-  namespace: mediwatt
+  namespace: medimatrx
 spec:
   podSelector:
     matchLabels:
@@ -140,7 +140,7 @@ apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
   name: ingest-egress
-  namespace: mediwatt
+  namespace: medimatrx
 spec:
   podSelector:
     matchLabels:
@@ -165,7 +165,7 @@ apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
   name: mongodb-ingress
-  namespace: mediwatt
+  namespace: medimatrx
 spec:
   podSelector:
     matchLabels:
@@ -186,7 +186,7 @@ apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
   name: price-ingress
-  namespace: mediwatt
+  namespace: medimatrx
 spec:
   podSelector:
     matchLabels:
@@ -214,7 +214,7 @@ apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
   name: price-egress-internet
-  namespace: mediwatt
+  namespace: medimatrx
 spec:
   podSelector:
     matchLabels:
@@ -238,7 +238,7 @@ apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
   name: optimizer-policy
-  namespace: mediwatt
+  namespace: medimatrx
 spec:
   podSelector:
     matchLabels:

@@ -1,14 +1,14 @@
 # ===========================================================================
 #  A namespace is a labelled box inside the Kubernetes cluster.
-#  Everything MediWatt owns goes in this box, which means:
-#    * "kubectl delete namespace mediwatt" cleans up the whole application
+#  Everything MediMatrx owns goes in this box, which means:
+#    * "kubectl delete namespace medimatrx" cleans up the whole application
 #    * we can apply network and security rules to the box as a whole
-#    * MediWatt cannot accidentally collide with anything else in the cluster
+#    * MediMatrx cannot accidentally collide with anything else in the cluster
 # ===========================================================================
 apiVersion: v1
 kind: Namespace
 metadata:
-  name: mediwatt
+  name: medimatrx
   labels:
-    name: mediwatt
-    app.kubernetes.io/part-of: mediwatt
+    name: medimatrx
+    app.kubernetes.io/part-of: medimatrx

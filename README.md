@@ -1,4 +1,4 @@
-# MediWatt: Hospital Energy Optimisation Platform
+# MediMatrx: Hospital Energy Optimisation Platform
 
 A microservice application that cuts a hospital's electricity bill by moving
 deferrable work into cheap-electricity hours, **without ever touching clinical
@@ -17,7 +17,7 @@ of the day typically costs about a third of the most expensive hour. Hospitals
 run 24/7 and spend 8-15 MSEK a year on power, but only part of that load is
 negotiable.
 
-MediWatt separates the two:
+MediMatrx separates the two:
 
 - **Clinical load**: ICU, operating theatres, imaging, wards. Never touched.
   This is enforced server-side, in the optimizer, where a user interface cannot
@@ -110,7 +110,7 @@ powershell -ExecutionPolicy Bypass -File .\scripts\4-demo-persistence.ps1
 ## Repository layout
 
 ```
-mediwatt/
+medimatrx/
 ├── services/
 │   ├── gateway/        Node.js  - API gateway + the dashboard (public/index.html)
 │   ├── ingest/         Node.js  - meter data, MongoDB owner

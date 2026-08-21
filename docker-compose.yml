@@ -17,9 +17,9 @@ services:
 
   mongodb:
     image: mongo:7.0
-    container_name: mediwatt-mongodb
+    container_name: medimatrx-mongodb
     environment:
-      MONGO_INITDB_ROOT_USERNAME: mediwatt
+      MONGO_INITDB_ROOT_USERNAME: medimatrx
       MONGO_INITDB_ROOT_PASSWORD: devpassword
     volumes:
       # A named volume - the same idea as a PersistentVolumeClaim in
@@ -34,13 +34,13 @@ services:
 
   ingest:
     build: ./services/ingest
-    container_name: mediwatt-ingest
+    container_name: medimatrx-ingest
     environment:
       PORT: "8080"
       POD_NAME: "ingest-local-1"
       MONGO_HOST: "mongodb:27017"
-      MONGO_DB: "mediwatt"
-      MONGO_USER: "mediwatt"
+      MONGO_DB: "medimatrx"
+      MONGO_USER: "medimatrx"
       MONGO_PASSWORD: "devpassword"
       TZ: "Europe/Stockholm"
     depends_on:
@@ -49,7 +49,7 @@ services:
 
   price:
     build: ./services/price
-    container_name: mediwatt-price
+    container_name: medimatrx-price
     environment:
       POD_NAME: "price-local-1"
       PRICE_AREA: "SE4"
@@ -58,7 +58,7 @@ services:
 
   optimizer:
     build: ./services/optimizer
-    container_name: mediwatt-optimizer
+    container_name: medimatrx-optimizer
     environment:
       POD_NAME: "optimizer-local-1"
       INGEST_URL: "http://ingest:8080"
@@ -70,7 +70,7 @@ services:
 
   gateway:
     build: ./services/gateway
-    container_name: mediwatt-gateway
+    container_name: medimatrx-gateway
     ports:
       # The ONLY port published to your laptop. Exactly like the NodePort
       # in Kubernetes: one door in, everything else stays private.

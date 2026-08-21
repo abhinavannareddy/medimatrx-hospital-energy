@@ -11,8 +11,8 @@ This script covers all six, in that order, with timings.
 - Deploy the app (`.\scripts\2-deploy.ps1`) so it is already running.
 - Open these windows and arrange them so you can switch quickly:
   1. Browser at `http://localhost:30080`
-  2. PowerShell, in the `mediwatt` folder
-  3. VS Code with the `mediwatt` folder open
+  2. PowerShell, in the `medimatrx` folder
+  3. VS Code with the `medimatrx` folder open
 - Close Slack, email, and anything with notifications.
 - Do a 20-second test recording first and check your microphone actually works.
 
@@ -24,7 +24,7 @@ because examiners do not care about a stumble.
 
 ## 0:00-0:50: What the problem is
 
-> "Hi, I'm Abhinav. This is MediWatt, a microservice application for optimising
+> "Hi, I'm Abhinav. This is MediMatrx, a microservice application for optimising
 > energy use in hospitals.
 >
 > Here's the problem. A large Swedish hospital spends somewhere between eight and
@@ -38,7 +38,7 @@ because examiners do not care about a stumble.
 > reschedule those. But some of it *is* negotiable. The laundry, the sterilisation
 > department, bulk cooking, and pre-cooling the building with the HVAC plant. That work has to happen every day, but it does not matter what hour it happens in.
 >
-> MediWatt finds that flexible load and moves it into the cheap hours. And it has
+> MediMatrx finds that flexible load and moves it into the cheap hours. And it has
 > one hard rule built into the code: it never, ever touches clinical load."
 
 ---
@@ -173,14 +173,14 @@ Open `k8s/08-network-policy.yaml`.
 Switch to PowerShell.
 
 ```powershell
-kubectl get pods -n mediwatt
+kubectl get pods -n medimatrx
 ```
 
 > "There's everything running. Two gateways, two ingest, two price, two optimizer,
 > and one MongoDB."
 
 ```powershell
-kubectl logs -l app=optimizer -n mediwatt --tail=15
+kubectl logs -l app=optimizer -n medimatrx --tail=15
 ```
 
 > "These are the logs. Structured JSON, one object per line, tagged with the
@@ -188,7 +188,7 @@ kubectl logs -l app=optimizer -n mediwatt --tail=15
 > optimisation being computed and what it found."
 
 ```powershell
-kubectl logs -l app=price -n mediwatt --tail=15
+kubectl logs -l app=price -n medimatrx --tail=15
 ```
 
 > "And here's the price service fetching from the live API. You can see it

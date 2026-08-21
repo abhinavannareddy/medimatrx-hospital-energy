@@ -1,7 +1,7 @@
 {
-  "name": "mediwatt-gateway",
+  "name": "medimatrx-gateway",
   "version": "1.0.0",
-  "description": "MediWatt API Gateway - the single front door to the system",
+  "description": "MediMatrx API Gateway - the single front door to the system",
   "main": "server.js",
   "scripts": {
     "start": "node server.js"

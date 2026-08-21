@@ -1,5 +1,5 @@
 // ===========================================================================
-//  MediWatt - API GATEWAY
+//  MediMatrx - API GATEWAY
 // ---------------------------------------------------------------------------
 //  Job in one sentence:
 //     "I am the only door into the system. The web browser talks to me and

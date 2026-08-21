@@ -95,7 +95,7 @@ policy.
 > The demo dataset shows around 1.3 to 1.6 million kronor a year for one hospital
 > against a cloud hosting cost of a few hundred kronor a month. But the honest
 > answer is that the technology is the easy part. The hard part is trust: you'd
-> start in advisory mode, where MediWatt only recommends and the estates team
+> start in advisory mode, where MediMatrx only recommends and the estates team
 > executes, and you'd need clinical safety sign-off before any automatic control.
 
 **"What would you build next?"**
@@ -193,7 +193,7 @@ policy.
 **"What's the risk of this architecture to the business?"**
 
 > Operational complexity is a real risk for a small company. Thirty Kubernetes
-> objects and four images need a build pipeline and someone on call. If MediWatt
+> objects and four images need a build pipeline and someone on call. If MediMatrx
 > were a startup with two engineers, I'd probably start as a modular monolith and
 > split out the optimizer first, when the scaling pressure actually appeared. The
 > architecture I've built is the *destination*, and I'd be honest with an

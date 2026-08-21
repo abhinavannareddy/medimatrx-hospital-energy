@@ -12,7 +12,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: optimizer-service
-  namespace: mediwatt
+  namespace: medimatrx
   labels:
     app: optimizer
 spec:
@@ -29,7 +29,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: optimizer
-  namespace: mediwatt
+  namespace: medimatrx
   labels:
     app: optimizer
     app.kubernetes.io/component: backend
@@ -64,7 +64,7 @@ spec:
                 topologyKey: kubernetes.io/hostname
       containers:
         - name: optimizer
-          image: abhinavannareddy/mediwatt-optimizer:1.0.0
+          image: abhinavannareddy/medimatrx-optimizer:1.0.0
           imagePullPolicy: IfNotPresent
           ports:
             - name: http
@@ -76,7 +76,7 @@ spec:
                   fieldPath: metadata.name
           envFrom:
             - configMapRef:
-                name: mediwatt-config
+                name: medimatrx-config
           resources:
             requests:
               cpu: "100m"

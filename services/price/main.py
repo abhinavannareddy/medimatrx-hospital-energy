@@ -1,6 +1,6 @@
 """
 ===========================================================================
- MediWatt - PRICE SERVICE
+ MediMatrx - PRICE SERVICE
 ---------------------------------------------------------------------------
  Job in one sentence:
     "I go out to the public internet, fetch today's real Swedish electricity
@@ -70,7 +70,7 @@ UPSTREAM_TIMEOUT = float(os.environ.get("UPSTREAM_TIMEOUT", "6.0"))
 STOCKHOLM = timezone(timedelta(hours=2))  # replaced per-record by the API's own offset
 
 app = FastAPI(
-    title="MediWatt Price Service",
+    title="MediMatrx Price Service",
     description="Serves hourly electricity spot prices for a Swedish bidding area.",
     version="1.0.0",
 )
@@ -120,7 +120,7 @@ async def fetch_upstream(area: str) -> dict:
 
     _stats["upstream_calls"] += 1
     async with httpx.AsyncClient(timeout=UPSTREAM_TIMEOUT) as client:
-        resp = await client.get(url, headers={"User-Agent": "MediWatt/1.0 (BTH cloud computing coursework)"})
+        resp = await client.get(url, headers={"User-Agent": "MediMatrx/1.0 (BTH cloud computing coursework)"})
         resp.raise_for_status()
         raw = resp.json()
 
